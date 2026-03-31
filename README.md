@@ -46,7 +46,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-单个容器会自动启动，包含 Go API、嵌入前端和 Postfix 收信服务。
+单个容器内通过 Nginx 提供前端静态文件并反向代理 API 请求，Go API 和 Postfix 在后台运行，对外仅暴露 Web 端口和 SMTP 端口。
 
 > SQLite 数据库文件存储在 `./data/tempmail.db`，首次启动自动创建。
 
@@ -152,12 +152,13 @@ tempmail/
 │   ├── middleware/        # 鉴权、速率限制（内存实现）
 │   ├── model/            # 数据结构
 │   └── store/            # SQLite 数据库操作
-├── frontend/             # 静态 SPA（编译时嵌入 Go 二进制）
+├── frontend/             # 静态 SPA（由 Nginx 提供服务）
+├── nginx/                # Nginx 配置（前端静态文件 + API 反向代理）
 ├── postfix/              # Postfix 邮件接收
 ├── sql/                  # SQLite DDL 参考
 ├── data/                 # 运行时数据（tempmail.db、admin.key）
-├── Dockerfile            # 单容器构建（Go + Postfix + supervisord）
-├── supervisord.conf      # 进程管理配置
+├── Dockerfile            # 单容器构建（Nginx + Go + Postfix + supervisord）
+├── supervisord.conf      # 进程管理配置（nginx + api-server + postfix）
 ├── docker-compose.yml
 └── .env
 ```

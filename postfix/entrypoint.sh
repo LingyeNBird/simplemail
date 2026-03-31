@@ -19,7 +19,7 @@ echo "${SMTP_HOSTNAME:-mail.example.com}     OK" > /etc/postfix/virtual_domains
 cat > /usr/local/bin/sync-domains.sh << 'SCRIPT'
 #!/bin/bash
 while true; do
-    DOMAINS=$(curl -sf http://localhost:8080/internal/domains 2>/dev/null || echo "")
+    DOMAINS=$(curl -sf http://localhost:8081/internal/domains 2>/dev/null || echo "")
     if [ -n "$DOMAINS" ]; then
         echo "$DOMAINS" | python3 -c "
 import sys, json

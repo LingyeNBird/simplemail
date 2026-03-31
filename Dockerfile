@@ -1,5 +1,5 @@
 # ============================================================
-# TempMail 单容器构建 - Go API + 嵌入前端 + Postfix
+# TempMail 单容器构建 - Nginx（前端）+ Go API + Postfix
 # ============================================================
 
 # ==================== Stage 1: Go 构建 ====================
@@ -7,11 +7,8 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /build
 
-# 复制 Go 源码
+# 复制 Go 源码（纯 API，不再嵌入前端）
 COPY api/ .
-
-# 复制前端文件用于 go:embed（main.go 中 //go:embed all:frontend）
-COPY frontend/ ./frontend/
 
 RUN go mod tidy && go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /build/api-server .
@@ -24,6 +21,7 @@ ENV TZ=Asia/Shanghai
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postfix \
+    nginx \
     python3 \
     curl \
     ca-certificates \
@@ -33,6 +31,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Go 二进制
 COPY --from=builder /build/api-server /usr/local/bin/api-server
+
+# 前端静态文件
+COPY frontend/ /usr/share/nginx/html/
+
+# Nginx 配置
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# 移除 Nginx 默认站点（避免冲突）
+RUN rm -f /etc/nginx/sites-enabled/default
 
 # Postfix 配置
 COPY postfix/main.cf /etc/postfix/main.cf

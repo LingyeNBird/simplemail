@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"embed"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -20,9 +18,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed all:frontend
-var frontendFS embed.FS
 
 func main() {
 	cfg := config.Load()
@@ -172,21 +167,6 @@ func main() {
 		})
 	}
 
-	// ==================== 静态文件（嵌入前端 SPA）====================
-	frontendSub, _ := fs.Sub(frontendFS, "frontend")
-
-	// 静态资源
-	r.StaticFS("/css", http.FS(frontendSub))
-	r.StaticFS("/js", http.FS(frontendSub))
-
-	// SPA fallback: 非 API 路径返回 index.html
-	r.NoRoute(func(c *gin.Context) {
-		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-		c.Header("Pragma", "no-cache")
-		c.Header("Expires", "0")
-		c.FileFromFS("index.html", http.FS(frontendSub))
-	})
-
 	// ==================== 邮箱自动过期清理 ====================
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
@@ -291,7 +271,7 @@ func main() {
 
 	// ==================== 启动服务 ====================
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
+		Addr:         "127.0.0.1:" + cfg.Port,
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,

@@ -19,7 +19,7 @@ func Load() *Config {
 	rw, _ := strconv.Atoi(getEnv("RATE_WINDOW", "60"))
 
 	return &Config{
-		Port:         getEnv("PORT", "8080"),
+		Port:         getEnv("PORT", "8081"),
 		DBDSN:        getEnv("DB_DSN", ""),
 		RateLimit:    rl,
 		RateWindow:   rw,
