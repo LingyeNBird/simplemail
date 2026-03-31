@@ -1,6 +1,6 @@
 # TempMail (轻量版)
 
-一个自托管临时邮箱服务平台，**使用 SQLite 替代 PostgreSQL + Redis**，仅需 3 个容器即可运行。
+一个自托管临时邮箱服务平台，**使用 SQLite 替代 PostgreSQL + Redis**，仅需 1 个容器即可运行。
 
 支持多域名、用户自助提交域名、MX 自动验证与自动禁用、API Key 鉴权及 Web 管理后台。
 
@@ -46,7 +46,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-三个容器会自动启动：`api`、`frontend`（Nginx）、`postfix`。
+单个容器会自动启动，包含 Go API、嵌入前端和 Postfix 收信服务。
 
 > SQLite 数据库文件存储在 `./data/tempmail.db`，首次启动自动创建。
 
@@ -72,7 +72,6 @@ cat data/admin.key
 |------|--------|------|
 | `SMTP_SERVER_IP` | *(必填)* | 服务器公网 IP |
 | `SMTP_HOSTNAME` | *(推荐)* | 邮件服务器主机名 |
-| `API_PORT` | `8080` | API 监听端口 |
 | `API_DB_PATH` | `/data/tempmail.db` | SQLite 文件路径 |
 | `API_RATE_LIMIT` | `500` | 每令牌每窗口期最大请求数 |
 | `API_RATE_WINDOW` | `60` | 速率窗口（秒）|
@@ -153,26 +152,15 @@ tempmail/
 │   ├── middleware/        # 鉴权、速率限制（内存实现）
 │   ├── model/            # 数据结构
 │   └── store/            # SQLite 数据库操作
-├── frontend/             # 静态 SPA（Nginx 托管）
-├── nginx/                # Nginx 反向代理配置
+├── frontend/             # 静态 SPA（编译时嵌入 Go 二进制）
 ├── postfix/              # Postfix 邮件接收
 ├── sql/                  # SQLite DDL 参考
 ├── data/                 # 运行时数据（tempmail.db、admin.key）
+├── Dockerfile            # 单容器构建（Go + Postfix + supervisord）
+├── supervisord.conf      # 进程管理配置
 ├── docker-compose.yml
 └── .env
 ```
-
----
-
-## 与原版（PostgreSQL 版）的差异
-
-| 项目 | 原版 | 轻量版 |
-|------|------|--------|
-| 数据库 | PostgreSQL 16 + PgBouncer | SQLite（单文件） |
-| 缓存/限速 | Redis 滑动窗口 | 内存 map |
-| 容器数 | 6 个 | 3 个 |
-| 适用场景 | 高并发生产环境 | 个人/小团队轻量部署 |
-| 数据迁移 | pg_dump/pg_restore | 复制 tempmail.db 文件 |
 
 ---
 
