@@ -118,8 +118,15 @@ func main() {
 		}
 	}
 
-	// 内部邮件投递接口（Postfix pipe 调用，仅内部网络）
+	// 内部邮件投递接口（Postfix pipe 调用，仅限本机访问）
 	internal := r.Group("/internal")
+	internal.Use(func(c *gin.Context) {
+		if c.ClientIP() != "127.0.0.1" && c.ClientIP() != "::1" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "internal endpoint"})
+			return
+		}
+		c.Next()
+	})
 	{
 		// 域名列表（供 Postfix 同步）
 		internal.GET("/domains", func(c *gin.Context) {
@@ -174,6 +181,9 @@ func main() {
 
 	// SPA fallback: 非 API 路径返回 index.html
 	r.NoRoute(func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
 		c.FileFromFS("index.html", http.FS(frontendSub))
 	})
 

@@ -19,13 +19,6 @@ func Load() *Config {
 	rw, _ := strconv.Atoi(getEnv("RATE_WINDOW", "60"))
 
 	return &Config{
-		// ★ PORT：API 容器内监听端口，默认 8080。
-		// 由 .env 中的 API_PORT 注入。修改此端口后需同步：
-		//   1. .env / .env.example 的 API_PORT
-		//   2. docker-compose.yml api.ports 右边数字
-		//   3. nginx/default.conf 所有 proxy_pass http://api:8080
-		//   4. postfix/entrypoint.sh curl http://api:8080
-		//   5. postfix/mail-receiver.py API_URL 默认值
 		Port:         getEnv("PORT", "8080"),
 		DBDSN:        getEnv("DB_DSN", ""),
 		RateLimit:    rl,
