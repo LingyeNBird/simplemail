@@ -1324,7 +1324,15 @@ async function renderAdminSettings(container) {
         <div class="divider"></div>
 
         <!-- CF API Token -->
-        ${inputRow('input-cf-api-token', 'Cloudflare API Token', cfApiToken, '用于自动创建子域名 MX 解析。需要 Zone:DNS:Edit 权限。配置后可通过 API 或管理后台一键添加子域名。', '', 'cf_api_token')}
+        <div class="form-group">
+          <label class="form-label">Cloudflare API Token</label>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <input class="form-input" id="input-cf-api-token" value="${escHtml(cfApiToken)}" placeholder="" style="flex:1" type="password" />
+            <button class="btn btn-ghost btn-sm" onclick="const inp=document.getElementById('input-cf-api-token');inp.type=inp.type==='password'?'text':'password'" title="显示/隐藏">👁</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-cf-api-token','cf_api_token')">✓ 保存</button>
+          </div>
+          <div class="form-hint">用于自动创建子域名 MX 解析。需要 Zone:DNS:Edit 权限。配置后可通过 API 或管理后台一键添加子域名。</div>
+        </div>
         <div class="divider"></div>
 
         <!-- 默认邮箱域名 -->
