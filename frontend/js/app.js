@@ -800,7 +800,10 @@ async function renderEmailView(container) {
 async function renderDomainsGuide(container) {
   const actions = $('topbar-actions');
   if (actions) {
-    actions.innerHTML = `<button class="btn btn-success btn-sm" onclick="showMXRegisterModal()">⚡ 提交域名自动验证</button>`;
+    actions.innerHTML = `
+      <button class="btn btn-success btn-sm" onclick="showCFCreateModal()">☁ CF自动创建子域名</button>
+      <button class="btn btn-success btn-sm" onclick="showMXRegisterModal()" style="margin-left:0.4rem">⚡ 提交域名自动验证</button>
+    `;
   }
 
   const [domains, pub] = await Promise.all([
@@ -1577,6 +1580,174 @@ window.showMXRegisterModal = function() {
       } catch {}
     }, 5000);
   }
+};
+
+// ─── CF 自动创建子域名 ──────────────────────────────────
+//
+// 功能说明：
+//   用户在「域名列表」页点击「☁ CF自动创建子域名」按钮后弹出此弹窗。
+//   用户只需输入子域名前缀（如 "vet"），系统会自动完成以下操作：
+//     1. 从公共设置读取 smtp_hostname，推导出基础域名
+//        （例如 smtp_hostname = "mail.nightunderfly.online" → 基础域名 = "nightunderfly.online"）
+//     2. 拼接完整子域名 = 前缀 + "." + 基础域名（如 "vet.nightunderfly.online"）
+//     3. 调用后端 POST /api/admin/domains/cf-create 接口，后端会：
+//        a) 通过 CF API 根据"基础域名"查找对应的 Cloudflare Zone ID
+//        b) 在该 Zone 下创建 MX 记录（子域名 → smtp_hostname，优先级 10）
+//        c) 将域名以 pending 状态写入本地域名池
+//     4. 后台 MX 验证器每 30 秒自动检测，DNS 生效后域名自动激活
+//
+// 前置条件：
+//   - 系统设置中已配置 cf_api_token（Cloudflare API Token，需 Zone:DNS:Edit 权限）
+//   - 系统设置中已配置 smtp_hostname（邮件服务器主机名，用作 MX 记录目标）
+//   - 基础域名的 DNS 托管在 Cloudflare 上
+//
+// 错误处理：
+//   - smtp_hostname 未配置 → 基础域名输入框显示提示
+//   - cf_api_token 未配置 → 后端返回 400，前端显示错误信息
+//   - CF Zone 未找到 → 后端返回 400，前端显示错误信息
+//   - CF DNS 创建失败 → 后端返回 502，前端显示错误信息
+//   - 域名已存在 → 后端返回 409，前端显示错误信息
+//
+window.showCFCreateModal = function() {
+  // 关闭可能存在的旧弹窗，防止叠加
+  const old = document.querySelector('.modal-overlay');
+  if (old) old.remove();
+  const overlay = el('div', 'modal-overlay');
+
+  // 弹窗结构：
+  //   1. 标题 + 说明文字
+  //   2. 基础域名（只读，从 smtp_hostname 自动提取）
+  //   3. 子域名前缀输入框（用户填写）
+  //   4. 实时预览完整域名（前缀 + 基础域名）
+  //   5. 状态信息区（显示错误或成功提示）
+  //   6. 操作按钮（取消 / 创建，创建按钮在输入前缀前禁用）
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:520px">
+      <div class="modal-title">☁ CF 自动创建子域名</div>
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin:0.5rem 0 0.8rem">
+        输入子域名前缀，系统将自动通过 Cloudflare API 创建 MX 记录并加入域名验证队列。
+      </p>
+      <div class="form-group">
+        <label class="form-label">基础域名</label>
+        <input class="form-input" id="cfc-base" placeholder="加载中..." readonly style="background:var(--bg-secondary)" />
+        <div class="form-hint">从系统设置 smtp_hostname 自动提取（如 mail.nightunderfly.online → nightunderfly.online）</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">子域名前缀</label>
+        <input class="form-input" id="cfc-prefix" placeholder="例如 vet" autofocus />
+        <div class="form-hint">最终域名 = 前缀 + . + 基础域名（如 vet.nightunderfly.online）</div>
+      </div>
+      <div id="cfc-preview" style="background:var(--bg-secondary);border-radius:6px;padding:0.5rem 0.9rem;margin-bottom:0.7rem;font-size:0.84rem;display:none">
+        预览：<code id="cfc-full" style="font-weight:600"></code>
+      </div>
+      <div id="cfc-status" style="display:none;margin-bottom:0.7rem"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">取消</button>
+        <button class="btn btn-primary" id="cfc-submit" disabled>创建</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // 缓存 DOM 元素引用，避免重复查询
+  const baseInp   = overlay.querySelector('#cfc-base');
+  const prefixInp = overlay.querySelector('#cfc-prefix');
+  const previewEl = overlay.querySelector('#cfc-preview');
+  const fullEl    = overlay.querySelector('#cfc-full');
+  const submitBtn = overlay.querySelector('#cfc-submit');
+
+  // 从公共设置获取 smtp_hostname，推导基础域名
+  // 例如 smtp_hostname = "mail.nightunderfly.online"
+  //   拆分为 ["mail", "nightunderfly", "online"]
+  //   取第一段之后的部分 → "nightunderfly.online" 作为基础域名
+  // 这样用户只需输入 "vet" 即可生成完整域名 "vet.nightunderfly.online"
+  let baseDomain = '';
+  api.publicSettings().then(s => {
+    const hostname = s.smtp_hostname || '';
+    if (hostname) {
+      const parts = hostname.split('.');
+      // 至少 3 段（如 mail.xxx.xxx）才去掉第一段提取主域名
+      if (parts.length >= 3) {
+        baseDomain = parts.slice(1).join('.');
+      } else {
+        // 如果 smtp_hostname 本身就是主域名格式（如 nightunderfly.online），直接使用
+        baseDomain = hostname;
+      }
+    }
+    baseInp.value = baseDomain || '未配置 smtp_hostname';
+    baseInp.title = baseDomain ? '' : '请在系统设置中配置 smtp_hostname';
+    updatePreview();
+  }).catch(() => {
+    baseInp.value = '获取失败';
+  });
+
+  // 实时预览：当用户输入前缀且基础域名已就绪时，显示完整域名预览并启用创建按钮
+  function updatePreview() {
+    const prefix = prefixInp.value.trim();
+    if (baseDomain && prefix) {
+      previewEl.style.display = 'block';
+      fullEl.textContent = prefix + '.' + baseDomain;
+      submitBtn.disabled = false;
+    } else {
+      previewEl.style.display = 'none';
+      submitBtn.disabled = true;
+    }
+  }
+
+  // 输入时实时更新预览；回车直接提交
+  prefixInp.addEventListener('input', updatePreview);
+  prefixInp.addEventListener('keydown', e => { if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click(); });
+
+  // 点击创建按钮 → 拼接完整域名 → 调用 cf-create API
+  submitBtn.addEventListener('click', async () => {
+    const prefix = prefixInp.value.trim().toLowerCase();
+    if (!prefix || !baseDomain) return;
+    const fullDomain = prefix + '.' + baseDomain;
+
+    // 禁用按钮防止重复提交，显示加载状态
+    submitBtn.disabled = true;
+    submitBtn.textContent = '创建中...';
+
+    const statusEl = overlay.querySelector('#cfc-status');
+    // 根据用户角色决定创建完成后跳转的页面
+    const domainListPage = state.account?.is_admin ? 'admin-domains' : 'domains-guide';
+
+    try {
+      // 调用后端 CF 创建接口，后端会：
+      //   1. 查找 CF Zone
+      //   2. 创建 MX DNS 记录
+      //   3. 将域名以 pending 状态加入本地域名池
+      const r = await api.admin.cfCreate({ domain: fullDomain });
+
+      // CF 创建成功 → 替换弹窗内容为成功结果页
+      const zone = r.zone || '';
+      const mxTarget = r.mx_target || '';
+      overlay.innerHTML = `
+        <div class="modal" style="text-align:center;padding:1.5rem">
+          <div style="font-size:2rem">✅</div>
+          <h3 style="margin:0.5rem 0">MX 记录已创建</h3>
+          <div style="font-size:0.82rem;color:var(--text-secondary);text-align:left;margin:0.8rem 0">
+            <p><b>域名：</b><code>${escHtml(fullDomain)}</code></p>
+            <p><b>Zone：</b>${escHtml(zone)}</p>
+            <p><b>MX →</b> ${escHtml(mxTarget)}</p>
+          </div>
+          <div style="background:var(--clr-warn-bg,#fff8e1);border:1px solid var(--clr-warn,#e6a817);border-radius:6px;padding:0.6rem 0.9rem;font-size:0.81rem;margin:0.8rem 0">
+            ⏳ 域名已加入验证队列，DNS 生效后自动激活（通常 5-30 分钟）。
+          </div>
+          <button class="btn btn-primary" style="margin-top:0.5rem" onclick="this.closest('.modal-overlay').remove();navigate('${domainListPage}')">前往域名列表查看</button>
+        </div>
+      `;
+      toast(`✓ ${fullDomain} MX 记录已创建，等待验证`, 'success');
+    } catch(e) {
+      // 创建失败 → 恢复按钮状态，在状态区显示后端返回的错误信息
+      submitBtn.disabled = false;
+      submitBtn.textContent = '创建';
+      statusEl.style.display = 'block';
+      statusEl.innerHTML = `<div style="color:var(--clr-danger);font-size:0.82rem">❌ ${escHtml(e.message)}</div>`;
+    }
+  });
 };
 
 // ─── API 文档 ─────────────────────────────────────────
