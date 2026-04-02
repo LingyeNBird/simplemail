@@ -24,12 +24,20 @@ func NewDomainHandler(s *store.Store, smtpIP, smtpHostname string) *DomainHandle
 	return &DomainHandler{store: s, cfgIP: smtpIP, cfgHostname: smtpHostname}
 }
 
-// getServerIP 优先读 DB 设置，其次环境变量传入的值
 func (h *DomainHandler) getServerIP(ctx context.Context) string {
 	if ip, err := h.store.GetSetting(ctx, "smtp_server_ip"); err == nil && ip != "" {
 		return ip
 	}
 	return h.cfgIP
+}
+
+func (h *DomainHandler) GetServerIP() string {
+	return h.getServerIP(context.Background())
+}
+
+func (h *DomainHandler) UpdateConfig(serverIP, hostname string) {
+	h.cfgIP = serverIP
+	h.cfgHostname = hostname
 }
 
 // getServerHostname 返回 MX 记录应指向的邮件服务器 hostname

@@ -9,11 +9,12 @@ import (
 )
 
 type SettingHandler struct {
-	store *store.Store
+	store   *store.Store
+	domainH *DomainHandler
 }
 
-func NewSettingHandler(s *store.Store) *SettingHandler {
-	return &SettingHandler{store: s}
+func NewSettingHandler(s *store.Store, domainH *DomainHandler) *SettingHandler {
+	return &SettingHandler{store: s, domainH: domainH}
 }
 
 // GET /public/settings → 返回前端需要的公开配置
@@ -76,6 +77,11 @@ func (h *SettingHandler) AdminUpdate(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+	}
+	if h.domainH != nil {
+		ip, _ := h.store.GetSetting(c.Request.Context(), "smtp_server_ip")
+		hn, _ := h.store.GetSetting(c.Request.Context(), "smtp_hostname")
+		h.domainH.UpdateConfig(ip, hn)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "settings updated"})
 }

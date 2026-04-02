@@ -31,6 +31,20 @@ func main() {
 	defer db.Close()
 	log.Println("✓ Database connected")
 
+	// ==================== 启动时同步环境变量 → DB ====================
+	if cfg.SMTPServerIP != "" {
+		if dbIP, _ := db.GetSetting(ctx, "smtp_server_ip"); dbIP != cfg.SMTPServerIP {
+			_ = db.SetSetting(ctx, "smtp_server_ip", cfg.SMTPServerIP)
+			log.Printf("✓ Synced SMTP_SERVER_IP from env to DB: %s", cfg.SMTPServerIP)
+		}
+	}
+	if cfg.SMTPHostname != "" {
+		if dbHN, _ := db.GetSetting(ctx, "smtp_hostname"); dbHN != cfg.SMTPHostname {
+			_ = db.SetSetting(ctx, "smtp_hostname", cfg.SMTPHostname)
+			log.Printf("✓ Synced SMTP_HOSTNAME from env to DB: %s", cfg.SMTPHostname)
+		}
+	}
+
 	// ==================== Gin 路由 ====================
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -55,7 +69,7 @@ func main() {
 	domainH := handler.NewDomainHandler(db, cfg.SMTPServerIP, cfg.SMTPHostname)
 	mailboxH := handler.NewMailboxHandler(db)
 	emailH := handler.NewEmailHandler(db)
-	settingH := handler.NewSettingHandler(db)
+	settingH := handler.NewSettingHandler(db, domainH)
 	registerH := handler.NewRegisterHandler(db)
 	statsH := handler.NewStatsHandler(db)
 
@@ -201,10 +215,7 @@ func main() {
 				if len(pendingDomains) == 0 {
 					continue
 				}
-				serverIP, _ := db.GetSetting(context.Background(), "smtp_server_ip")
-				if serverIP == "" {
-					serverIP = cfg.SMTPServerIP
-				}
+				serverIP := domainH.GetServerIP()
 				for _, d := range pendingDomains {
 					matched, _, mxStatus := store.CheckDomainMX(d.Domain, serverIP)
 					db.TouchDomainCheckTime(context.Background(), d.ID)
@@ -226,10 +237,7 @@ func main() {
 					log.Printf("[mx-recheck] list active error: %v", err)
 					continue
 				}
-				serverIP, _ := db.GetSetting(context.Background(), "smtp_server_ip")
-				if serverIP == "" {
-					serverIP = cfg.SMTPServerIP
-				}
+				serverIP := domainH.GetServerIP()
 				log.Printf("[mx-recheck] checking %d active domains", len(activeDomains))
 				for _, d := range activeDomains {
 					matched, _, mxStatus := store.CheckDomainMX(d.Domain, serverIP)
