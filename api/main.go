@@ -69,7 +69,7 @@ func main() {
 	domainH := handler.NewDomainHandler(db, cfg.SMTPServerIP, cfg.SMTPHostname)
 	mailboxH := handler.NewMailboxHandler(db)
 	emailH := handler.NewEmailHandler(db)
-	settingH := handler.NewSettingHandler(db, domainH)
+	settingH := handler.NewSettingHandler(db, domainH, cfg.EnvFilePath)
 	registerH := handler.NewRegisterHandler(db)
 	statsH := handler.NewStatsHandler(db)
 

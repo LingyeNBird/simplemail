@@ -12,6 +12,7 @@ type Config struct {
 	RateWindow   int    // seconds
 	SMTPServerIP string // 仅从 SMTP_SERVER_IP 环境变量读取
 	SMTPHostname string // 邮件服务器场指向的 hostname，不硬编码
+	EnvFilePath  string // .env 文件路径，用于回写环境变量
 }
 
 func Load() *Config {
@@ -25,6 +26,7 @@ func Load() *Config {
 		RateWindow:   rw,
 		SMTPServerIP: os.Getenv("SMTP_SERVER_IP"),
 		SMTPHostname: os.Getenv("SMTP_HOSTNAME"),
+		EnvFilePath:  getEnv("ENV_FILE", ""),
 	}
 }
 

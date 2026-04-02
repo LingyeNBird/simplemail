@@ -29,12 +29,14 @@ services:
       - "25:25"
     volumes:
       - ./data:/data
+      - ./.env:/data/.env:rw
     environment:
       DB_DSN: ${API_DB_PATH:-/data/tempmail.db}
       RATE_LIMIT: ${API_RATE_LIMIT:-500}
       RATE_WINDOW: ${API_RATE_WINDOW:-60}
       SMTP_SERVER_IP: ${SMTP_SERVER_IP}
       SMTP_HOSTNAME: ${SMTP_HOSTNAME}
+      ENV_FILE: /data/.env
       ADMIN_KEY_FILE: /data/admin.key
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
