@@ -395,15 +395,32 @@ func (h *DomainHandler) CFCreate(c *gin.Context) {
 	// subdomain 是相对 Zone 的子域名部分，如 "vet"（从 vet.nightunderfly.online 去掉 .nightunderfly.online）
 	// MX 记录内容为 smtp_hostname，优先级 10，DNS only（不经过 CF 代理）
 	subdomain := strings.TrimSuffix(req.Domain, "."+zone.Name)
-	created, err := client.CreateMXRecord(zone.ID, subdomain, hostname)
-	if err != nil {
+
+	var created *cf.DNSRecord
+	existing, findErr := client.FindMXRecord(zone.ID, subdomain, zone.Name, hostname)
+	if findErr != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
-			"error":     "创建 Cloudflare DNS 记录失败: " + err.Error(),
+			"error":     "查询 Cloudflare DNS 记录失败: " + findErr.Error(),
 			"zone":      zone.Name,
 			"subdomain": subdomain,
-			"mx_target": hostname,
 		})
 		return
+	}
+
+	if existing != nil {
+		created = existing
+	} else {
+		var createErr error
+		created, createErr = client.CreateMXRecord(zone.ID, subdomain, hostname)
+		if createErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":     "创建 Cloudflare DNS 记录失败: " + createErr.Error(),
+				"zone":      zone.Name,
+				"subdomain": subdomain,
+				"mx_target": hostname,
+			})
+			return
+		}
 	}
 
 	// 将域名以 pending 状态加入本地域名池
