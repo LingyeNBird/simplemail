@@ -97,7 +97,7 @@ func (c *CFClient) FindZoneByName(zoneName string) (*Zone, error) {
 
 	zones := result.Result.(*[]Zone)
 	if len(*zones) == 0 {
-		return nil, fmt.Errorf("zone not found for domain: %s (looked up zone: %s)", domain, zoneName)
+		return nil, fmt.Errorf("zone not found: %s", zoneName)
 	}
 
 	return &(*zones)[0], nil
