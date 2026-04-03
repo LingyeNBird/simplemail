@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -138,4 +139,67 @@ func (c *CFClient) CreateMXRecord(zoneID, subdomain, target string) (*DNSRecord,
 
 	created := result.Result.(*DNSRecord)
 	return created, nil
+}
+
+// FindMXRecord searches for MX records under a zone that match the given subdomain.
+// Returns the matching DNSRecord or nil if not found.
+func (c *CFClient) FindMXRecord(zoneID, subdomain, target string) (*DNSRecord, error) {
+	req, _ := http.NewRequest("GET", baseURL+"/zones/"+zoneID+"/dns_records?type=MX&name="+url.QueryEscape(subdomain), nil)
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("CF API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var result cfResponse
+	result.Result = &[]DNSRecord{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("CF API parse error: %w", err)
+	}
+
+	if !result.Success {
+		msg := "unknown error"
+		if len(result.Errors) > 0 {
+			msg = result.Errors[0].Message
+		}
+		return nil, fmt.Errorf("CF API error: %s", msg)
+	}
+
+	records := result.Result.(*[]DNSRecord)
+	for _, r := range *records {
+		if r.Content == target {
+			return &r, nil
+		}
+	}
+	return nil, nil
+}
+
+// DeleteDNSRecord deletes a DNS record by its ID.
+func (c *CFClient) DeleteDNSRecord(zoneID, recordID string) error {
+	req, _ := http.NewRequest("DELETE", baseURL+"/zones/"+zoneID+"/dns_records/"+recordID, nil)
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("CF API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var result cfResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("CF API parse error: %w", err)
+	}
+
+	if !result.Success {
+		msg := "unknown error"
+		if len(result.Errors) > 0 {
+			msg = result.Errors[0].Message
+		}
+		return fmt.Errorf("CF API error: %s", msg)
+	}
+	return nil
 }

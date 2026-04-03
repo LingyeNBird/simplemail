@@ -120,6 +120,10 @@ func main() {
 			admin.POST("/domains/mx-import", domainH.MXImport)
 			admin.POST("/domains/mx-register", domainH.MXRegister)
 			admin.POST("/domains/cf-create", domainH.CFCreate)
+			admin.DELETE("/domains/:id/cf", domainH.CFDelete)
+			admin.PUT("/domains/batch/toggle", domainH.BatchToggle)
+			admin.PUT("/domains/batch/delete", domainH.BatchDelete)
+			admin.PUT("/domains/batch/cf-delete", domainH.BatchCFDelete)
 			admin.GET("/domains/:id/status", domainH.GetStatus)
 
 			// 系统设置管理

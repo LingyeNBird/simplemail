@@ -429,3 +429,169 @@ func (h *DomainHandler) CFCreate(c *gin.Context) {
 		),
 	})
 }
+
+// DELETE /api/admin/domains/:id/cf — 通过 Cloudflare API 删除 MX 记录并从本地域名池移除
+func (h *DomainHandler) CFDelete(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid domain id"})
+		return
+	}
+
+	domain, err := h.store.GetDomainByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
+		return
+	}
+
+	cfToken, err := h.store.GetSetting(c.Request.Context(), "cf_api_token")
+	if err != nil || cfToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未配置 Cloudflare API Token，请在系统设置中添加 cf_api_token"})
+		return
+	}
+
+	hostname := h.getServerHostname(c.Request.Context())
+
+	client := cf.NewClient(cfToken)
+	zone, err := client.FindZone(domain.Domain)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "查找 Cloudflare Zone 失败: " + err.Error(), "domain": domain.Domain})
+		return
+	}
+
+	subdomain := strings.TrimSuffix(domain.Domain, "."+zone.Name)
+	record, err := client.FindMXRecord(zone.ID, subdomain, hostname)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "查找 MX 记录失败: " + err.Error(), "zone": zone.Name, "subdomain": subdomain})
+		return
+	}
+
+	deletedCF := false
+	if record != nil {
+		if err := client.DeleteDNSRecord(zone.ID, record.ID); err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "删除 Cloudflare DNS 记录失败: " + err.Error(), "record_id": record.ID})
+			return
+		}
+		deletedCF = true
+	}
+
+	if err := h.store.DeleteDomain(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除本地域名失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":           "域名已删除",
+		"domain":            domain.Domain,
+		"zone":              zone.Name,
+		"cf_record_deleted": deletedCF,
+	})
+}
+
+// PUT /api/admin/domains/batch/toggle — 批量启用/禁用域名
+func (h *DomainHandler) BatchToggle(c *gin.Context) {
+	var req struct {
+		IDs    []int `json:"ids" binding:"required"`
+		Active bool  `json:"active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated := 0
+	for _, id := range req.IDs {
+		if err := h.store.ToggleDomain(c.Request.Context(), id, req.Active); err == nil {
+			updated++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"updated": updated, "total": len(req.IDs)})
+}
+
+// PUT /api/admin/domains/batch/delete — 批量删除域名（仅本地）
+func (h *DomainHandler) BatchDelete(c *gin.Context) {
+	var req struct {
+		IDs []int `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	deleted := 0
+	for _, id := range req.IDs {
+		if err := h.store.DeleteDomain(c.Request.Context(), id); err == nil {
+			deleted++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted, "total": len(req.IDs)})
+}
+
+// PUT /api/admin/domains/batch/cf-delete — 批量通过 CF API 删除 MX 记录并移除域名
+func (h *DomainHandler) BatchCFDelete(c *gin.Context) {
+	var req struct {
+		IDs []int `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	cfToken, err := h.store.GetSetting(c.Request.Context(), "cf_api_token")
+	if err != nil || cfToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未配置 Cloudflare API Token"})
+		return
+	}
+
+	hostname := h.getServerHostname(c.Request.Context())
+	client := cf.NewClient(cfToken)
+
+	type batchResult struct {
+		ID     int    `json:"id"`
+		Domain string `json:"domain"`
+		Status string `json:"status"`
+		Error  string `json:"error,omitempty"`
+	}
+
+	var results []batchResult
+	for _, id := range req.IDs {
+		domain, err := h.store.GetDomainByID(c.Request.Context(), id)
+		if err != nil {
+			results = append(results, batchResult{ID: id, Status: "error", Error: "domain not found"})
+			continue
+		}
+
+		zone, zoneErr := client.FindZone(domain.Domain)
+		if zoneErr != nil {
+			_ = h.store.DeleteDomain(c.Request.Context(), id)
+			results = append(results, batchResult{ID: id, Domain: domain.Domain, Status: "deleted_local", Error: "zone not found: " + zoneErr.Error()})
+			continue
+		}
+
+		subdomain := strings.TrimSuffix(domain.Domain, "."+zone.Name)
+		record, findErr := client.FindMXRecord(zone.ID, subdomain, hostname)
+		if findErr != nil {
+			_ = h.store.DeleteDomain(c.Request.Context(), id)
+			results = append(results, batchResult{ID: id, Domain: domain.Domain, Status: "deleted_local", Error: "find MX failed: " + findErr.Error()})
+			continue
+		}
+
+		if record != nil {
+			if delErr := client.DeleteDNSRecord(zone.ID, record.ID); delErr != nil {
+				results = append(results, batchResult{ID: id, Domain: domain.Domain, Status: "error", Error: "delete CF record failed: " + delErr.Error()})
+				continue
+			}
+		}
+
+		if err := h.store.DeleteDomain(c.Request.Context(), id); err != nil {
+			results = append(results, batchResult{ID: id, Domain: domain.Domain, Status: "error", Error: "delete local failed: " + err.Error()})
+			continue
+		}
+
+		results = append(results, batchResult{ID: id, Domain: domain.Domain, Status: "success"})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"results": results, "total": len(req.IDs)})
+}
