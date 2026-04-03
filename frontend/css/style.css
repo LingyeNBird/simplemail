@@ -916,6 +916,38 @@ tr:hover td { background: rgba(184,92,56,0.04); }
   .step-num { width: 26px; height: 26px; font-size: 0.78rem; }
 }
 
+/* Batch action bar */
+.batch-bar {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+.batch-bar.active { display: flex; }
+.batch-bar .batch-count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--clr-primary);
+  min-width: 3.5rem;
+}
+.batch-bar .batch-sep {
+  width: 1px;
+  height: 1.4rem;
+  background: var(--border);
+}
+
+/* Domain checkbox */
+.domain-cb {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--clr-primary);
+  flex-shrink: 0;
+}
+
 /* 装饰纹路 (国风) */
 .grain-bg {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='1' height='1' fill='%23000' opacity='.03'/%3E%3C/svg%3E");

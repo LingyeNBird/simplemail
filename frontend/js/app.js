@@ -119,6 +119,10 @@ const api = {
     mxImport:    body => apiFetch(API_BASE + '/admin/domains/mx-import', { method: 'POST', body: JSON.stringify(body) }),
     mxRegister:  body => apiFetch(API_BASE + '/admin/domains/mx-register', { method: 'POST', body: JSON.stringify(body) }),
     cfCreate:    body => apiFetch(API_BASE + '/admin/domains/cf-create', { method: 'POST', body: JSON.stringify(body) }),
+    cfDelete:        id => apiFetch(API_BASE + '/admin/domains/' + id + '/cf', { method: 'DELETE' }),
+    batchToggle:     body => apiFetch(API_BASE + '/admin/domains/batch/toggle', { method: 'PUT', body: JSON.stringify(body) }),
+    batchDelete:     body => apiFetch(API_BASE + '/admin/domains/batch/delete', { method: 'PUT', body: JSON.stringify(body) }),
+    batchCFDelete:   body => apiFetch(API_BASE + '/admin/domains/batch/cf-delete', { method: 'PUT', body: JSON.stringify(body) }),
     getDomainStatus: id => apiFetch(API_BASE + '/admin/domains/' + id + '/status'),
   },
 };
@@ -1029,15 +1033,17 @@ async function renderAdminDomains(container) {
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>域名</th><th>上次检测</th><th>操作</th></tr></thead>
+              <thead><tr><th style="width:32px"></th><th>域名</th><th>上次检测</th><th>操作</th></tr></thead>
               <tbody id="pending-domains-tbody">
                 ${pending.map(d => `
                   <tr id="pending-row-${d.id}">
+                    <td><input type="checkbox" class="domain-cb" data-id="${d.id}" data-domain="${escHtml(d.domain)}" onchange="updateBatchBar()"></td>
                     <td style="font-family:var(--font-mono)">${escHtml(d.domain)}</td>
                     <td style="font-size:0.78rem">${d.mx_checked_at ? timeAgo(d.mx_checked_at) : '从未'}</td>
-                    <td>
+                    <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
                       <span class="badge badge-gold" id="pending-status-${d.id}">⏳ 检测中</span>
-                      <button class="btn btn-danger btn-sm" style="margin-left:0.4rem" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">✕</button>
+                      <button class="btn btn-ghost btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
+                      <button class="btn btn-danger btn-sm" onclick="confirmCFDeleteDomain(${d.id},'${escHtml(d.domain)}')">CF删除</button>
                     </td>
                   </tr>
                 `).join('')}
@@ -1052,20 +1058,34 @@ async function renderAdminDomains(container) {
           <div class="card-title">🌐 域名列表</div>
           <div style="font-size:0.78rem;color:var(--text-muted)">共 ${active.length} 个</div>
         </div>
+        <div class="batch-bar" id="batch-bar">
+          <input type="checkbox" class="domain-cb" id="select-all-cb" onchange="toggleAllDomainCB(this.checked)" title="全选/取消全选">
+          <span class="batch-count" id="batch-count">0</span>
+          <span style="font-size:0.78rem;color:var(--text-muted)">项已选</span>
+          <span class="batch-sep"></span>
+          <button class="btn btn-ghost btn-sm batch-btn" onclick="batchToggleDomains(true)" disabled>启用</button>
+          <button class="btn btn-ghost btn-sm batch-btn" onclick="batchToggleDomains(false)" disabled>禁用</button>
+          <button class="btn btn-danger btn-sm batch-btn" onclick="batchDeleteDomains()" disabled>删除</button>
+          <button class="btn btn-danger btn-sm batch-btn" onclick="batchCFDeleteDomains()" disabled>CF删除</button>
+          <span class="batch-sep"></span>
+          <button class="btn btn-ghost btn-sm" onclick="toggleAllDomainCB(false)">取消选择</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>域名</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:32px"></th><th>域名</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
-              ${active.length === 0 ? `<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无域名</td></tr>` :
+              ${active.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">暂无域名</td></tr>` :
                 active.map(d => `
                   <tr>
+                    <td><input type="checkbox" class="domain-cb" data-id="${d.id}" data-domain="${escHtml(d.domain)}" onchange="updateBatchBar()"></td>
                     <td style="font-family:var(--font-mono)">${escHtml(d.domain)}</td>
                     <td>${d.is_active
                       ? '<span class="badge badge-green">● 启用</span>'
                       : '<span class="badge badge-gray">○ 停用</span>'}</td>
-                    <td style="display:flex;gap:0.5rem;align-items:center">
+                    <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
                       <button class="btn btn-ghost btn-sm" onclick="toggleDomain(${d.id},${!d.is_active})">${d.is_active ? '停用' : '启用'}</button>
-                      <button class="btn btn-danger btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
+                      <button class="btn btn-ghost btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
+                      <button class="btn btn-danger btn-sm" onclick="confirmCFDeleteDomain(${d.id},'${escHtml(d.domain)}')">CF删除</button>
                     </td>
                   </tr>
                 `).join('')}
@@ -1076,7 +1096,6 @@ async function renderAdminDomains(container) {
     </div>
   `;
 
-  // 如果有 pending 域名，开始轮询
   if (pending.length > 0) {
     startPendingDomainPoller(pending.map(d => d.id));
   }
@@ -1252,6 +1271,76 @@ window.confirmDeleteDomain = function(id, name) {
     try {
       await api.admin.deleteDomain(id);
       toast('域名已删除', 'success');
+      navigate('admin-domains');
+    } catch(e) { toast('删除失败: ' + e.message, 'error'); }
+  });
+};
+
+window.toggleAllDomainCB = function(checked) {
+  document.querySelectorAll('.domain-cb').forEach(cb => { cb.checked = checked; });
+  updateBatchBar();
+};
+
+window.updateBatchBar = function() {
+  const checked = document.querySelectorAll('.domain-cb:checked');
+  const count = checked.length;
+  const bar = document.getElementById('batch-bar');
+  if (!bar) return;
+  bar.style.display = count > 0 ? 'flex' : 'none';
+  const countEl = document.getElementById('batch-count');
+  if (countEl) countEl.textContent = count;
+  bar.querySelectorAll('.batch-btn').forEach(btn => { btn.disabled = count === 0; });
+};
+
+window.getCheckedDomainIds = function() {
+  return [...document.querySelectorAll('.domain-cb:checked')].map(cb => parseInt(cb.dataset.id));
+};
+
+window.batchToggleDomains = async function(active) {
+  const ids = window.getCheckedDomainIds();
+  if (ids.length === 0) return;
+  const label = active ? '启用' : '禁用';
+  showModal(`批量${label}`, `<p>确定${label}选中的 <strong>${ids.length}</strong> 个域名？</p>`, async () => {
+    try {
+      const r = await api.admin.batchToggle({ ids, active });
+      toast(`已${label} ${r.updated || ids.length} 个域名`, 'success');
+      navigate('admin-domains');
+    } catch(e) { toast('操作失败: ' + e.message, 'error'); return false; }
+  });
+};
+
+window.batchDeleteDomains = async function() {
+  const ids = window.getCheckedDomainIds();
+  if (ids.length === 0) return;
+  showModal('批量删除', `<p>确定删除选中的 <strong>${ids.length}</strong> 个域名？<br><span style="font-size:0.8rem;color:var(--clr-danger)">此操作不可撤销。</span></p>`, async () => {
+    try {
+      const r = await api.admin.batchDelete({ ids });
+      toast(`已删除 ${r.deleted || ids.length} 个域名`, 'success');
+      navigate('admin-domains');
+    } catch(e) { toast('删除失败: ' + e.message, 'error'); return false; }
+  });
+};
+
+window.batchCFDeleteDomains = async function() {
+  const ids = window.getCheckedDomainIds();
+  if (ids.length === 0) return;
+  showModal('批量 CF 删除', `<p>确定删除选中的 <strong>${ids.length}</strong> 个域名及其 Cloudflare MX DNS 记录？<br><span style="font-size:0.8rem;color:var(--clr-danger)">此操作将同时删除 CF 上的 MX 记录和本地域名，不可撤销。</span></p>`, async () => {
+    try {
+      const r = await api.admin.batchCFDelete({ ids });
+      const results = r.results || [];
+      const ok = results.filter(x => x.status === 'success').length;
+      const fail = results.length - ok;
+      toast(`CF删除完成：成功 ${ok}，失败 ${fail}`, fail > 0 ? 'warn' : 'success');
+      navigate('admin-domains');
+    } catch(e) { toast('操作失败: ' + e.message, 'error'); return false; }
+  });
+};
+
+window.confirmCFDeleteDomain = function(id, name) {
+  showModal('CF 删除域名', `<p>确定删除域名 <strong>${escHtml(name)}</strong> 及其 Cloudflare MX DNS 记录？<br><span style="font-size:0.8rem;color:var(--clr-danger)">将同时删除 CF 上的 MX 记录和本地域名。</span></p>`, async () => {
+    try {
+      await api.admin.cfDelete(id);
+      toast('域名及 CF DNS 记录已删除', 'success');
       navigate('admin-domains');
     } catch(e) { toast('删除失败: ' + e.message, 'error'); }
   });
