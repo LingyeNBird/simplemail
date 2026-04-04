@@ -802,12 +802,13 @@ async function renderEmailView(container) {
 
 // ─── 域名列表 & 指南 ─────────────────────────────────────────
 async function renderDomainsGuide(container) {
+  const isAdmin = state.account?.is_admin;
   const actions = $('topbar-actions');
   if (actions) {
-    actions.innerHTML = `
+    actions.innerHTML = isAdmin ? `
       <button class="btn btn-success btn-sm" onclick="showCFCreateModal()">☁ CF自动创建子域名</button>
       <button class="btn btn-success btn-sm" onclick="showMXRegisterModal()" style="margin-left:0.4rem">⚡ 提交域名自动验证</button>
-    `;
+    ` : '';
   }
 
   const [domains, pub] = await Promise.all([
@@ -909,7 +910,7 @@ async function renderDomainsGuide(container) {
                     <li>MX 未生效 → 进入<b>待验证队列</b>，后台每 30 秒自动重试</li>
                   </ul>
                 </div>
-                <button class="btn btn-success btn-sm" style="margin-top:0.5rem" onclick="showMXRegisterModal()">⚡ 提交域名</button>
+                ${isAdmin ? '<button class="btn btn-success btn-sm" style="margin-top:0.5rem" onclick="showMXRegisterModal()">⚡ 提交域名</button>' : ''}
               </div>
             </div>
             <div class="guide-step">
