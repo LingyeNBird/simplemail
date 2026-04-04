@@ -800,6 +800,46 @@ async function renderEmailView(container) {
   }
 }
 
+// ─── 域名过滤（共享） ─────────────────────────────────────────
+let _guideDomains = [];
+let _adminDomains = [];
+
+function applyDomainFilter(tbodyId, domains, filterInputId, activeCbId, disabledCbId, rowRenderer) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+
+  const regexStr = (document.getElementById(filterInputId)?.value || '').trim();
+  const showActive   = document.getElementById(activeCbId)?.checked ?? true;
+  const showDisabled = document.getElementById(disabledCbId)?.checked ?? true;
+
+  let filtered = domains;
+
+  if (!showActive && !showDisabled) {
+    filtered = [];
+  } else if (!showActive) {
+    filtered = filtered.filter(d => !d.is_active);
+  } else if (!showDisabled) {
+    filtered = filtered.filter(d => d.is_active);
+  }
+
+  if (regexStr) {
+    try {
+      const re = new RegExp(regexStr, 'i');
+      filtered = filtered.filter(d => re.test(d.domain));
+    } catch {
+      // Invalid regex - show all (don't break the UI)
+    }
+  }
+
+  if (filtered.length === 0) {
+    const colSpan = tbody.querySelector('tr')?.children.length || 2;
+    tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;color:var(--text-muted);padding:1.5rem">无匹配域名</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(rowRenderer).join('');
+}
+
 // ─── 域名列表 & 指南 ─────────────────────────────────────────
 async function renderDomainsGuide(container) {
   const isAdmin = state.account?.is_admin;
@@ -823,6 +863,10 @@ async function renderDomainsGuide(container) {
 
   const pending = (domains||[]).filter(d => d.status === 'pending');
   const active  = (domains||[]).filter(d => d.status !== 'pending');
+
+  const enabledCount  = active.filter(d => d.is_active).length;
+  const disabledCount = active.filter(d => !d.is_active).length;
+  _guideDomains = active;
 
   const pendingHtml = pending.length > 0 ? `
     <div class="card" style="border-left:3px solid var(--clr-warn,#e6a817);margin-bottom:1rem">
@@ -852,11 +896,24 @@ async function renderDomainsGuide(container) {
     <div class="domain-guide-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;max-width:1000px">
       <div>
         <div class="card">
-          <div class="card-header"><div class="card-title">◎ 可用域名池</div></div>
+          <div class="card-header"><div class="card-title">◎ 可用域名池 <span class="badge badge-green">启用 ${enabledCount}</span> <span class="badge badge-gray">停用 ${disabledCount}</span></div></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>域名</th><th>状态</th></tr></thead>
-              <tbody>
+              <thead>
+                <tr><th>域名</th><th>状态</th></tr>
+                <tr class="table-filter-row">
+                  <td><input class="form-input domain-filter-input" id="guide-domain-filter" placeholder="正则过滤..." style="padding:0.3rem 0.6rem;font-size:0.78rem"></td>
+                  <td style="display:flex;gap:0.8rem;align-items:center">
+                    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
+                      <input type="checkbox" class="domain-cb" id="guide-filter-active" checked> 可用
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
+                      <input type="checkbox" class="domain-cb" id="guide-filter-disabled" checked> 停用
+                    </label>
+                  </td>
+                </tr>
+              </thead>
+              <tbody id="guide-domains-tbody">
                 ${active.length === 0
                   ? `<tr><td colspan="2" style="text-align:center;color:var(--text-muted)">暂无域名</td></tr>`
                   : active.map(d => `
@@ -925,6 +982,25 @@ async function renderDomainsGuide(container) {
       </div>
     </div>
   `;
+
+  const guideFilterInput = document.getElementById('guide-domain-filter');
+  const guideFilterActive = document.getElementById('guide-filter-active');
+  const guideFilterDisabled = document.getElementById('guide-filter-disabled');
+
+  function refreshGuideTable() {
+    applyDomainFilter('guide-domains-tbody', _guideDomains, 'guide-domain-filter', 'guide-filter-active', 'guide-filter-disabled', d => `
+      <tr>
+        <td style="font-family:var(--font-mono);font-size:0.82rem">${escHtml(d.domain)}</td>
+        <td>${d.is_active
+          ? '<span class="badge badge-green">● 启用</span>'
+          : '<span class="badge badge-gray">○ 停用</span>'}</td>
+      </tr>
+    `);
+  }
+
+  if (guideFilterInput) guideFilterInput.addEventListener('input', refreshGuideTable);
+  if (guideFilterActive) guideFilterActive.addEventListener('change', refreshGuideTable);
+  if (guideFilterDisabled) guideFilterDisabled.addEventListener('change', refreshGuideTable);
 
   if (pending.length > 0) {
     startPendingDomainPoller(pending.map(d => d.id));
@@ -1024,6 +1100,10 @@ async function renderAdminDomains(container) {
   const pending  = (domains||[]).filter(d => d.status === 'pending');
   const active   = (domains||[]).filter(d => d.status !== 'pending');
 
+  const enabledCount  = active.filter(d => d.is_active).length;
+  const disabledCount = active.filter(d => !d.is_active).length;
+  _adminDomains = active;
+
   container.innerHTML = `
     <div style="max-width:760px;display:flex;flex-direction:column;gap:1rem">
       ${pending.length > 0 ? `
@@ -1056,7 +1136,7 @@ async function renderAdminDomains(container) {
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title">🌐 域名列表</div>
+          <div class="card-title">🌐 域名列表 <span class="badge badge-green">启用 ${enabledCount}</span> <span class="badge badge-gray">停用 ${disabledCount}</span></div>
           <div style="font-size:0.78rem;color:var(--text-muted)">共 ${active.length} 个</div>
         </div>
         <div class="batch-bar" id="batch-bar">
@@ -1073,8 +1153,23 @@ async function renderAdminDomains(container) {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th style="width:32px"></th><th>域名</th><th>状态</th><th>操作</th></tr></thead>
-            <tbody>
+            <thead>
+              <tr><th style="width:32px"></th><th>域名</th><th>状态</th><th>操作</th></tr>
+              <tr class="table-filter-row">
+                <td></td>
+                <td><input class="form-input domain-filter-input" id="admin-domain-filter" placeholder="正则过滤..." style="padding:0.3rem 0.6rem;font-size:0.78rem"></td>
+                <td style="display:flex;gap:0.8rem;align-items:center">
+                  <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
+                    <input type="checkbox" class="domain-cb" id="admin-filter-active" checked> 可用
+                  </label>
+                  <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
+                    <input type="checkbox" class="domain-cb" id="admin-filter-disabled" checked> 停用
+                  </label>
+                </td>
+                <td></td>
+              </tr>
+            </thead>
+            <tbody id="admin-domains-tbody">
               ${active.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">暂无域名</td></tr>` :
                 active.map(d => `
                   <tr>
@@ -1089,13 +1184,39 @@ async function renderAdminDomains(container) {
                       <button class="btn btn-danger btn-sm" onclick="confirmCFDeleteDomain(${d.id},'${escHtml(d.domain)}')">CF删除</button>
                     </td>
                   </tr>
-                `).join('')}
+                 `).join('')}
             </tbody>
           </table>
         </div>
       </div>
     </div>
   `;
+
+  function refreshAdminTable() {
+    applyDomainFilter('admin-domains-tbody', _adminDomains, 'admin-domain-filter', 'admin-filter-active', 'admin-filter-disabled', d => `
+      <tr>
+        <td><input type="checkbox" class="domain-cb" data-id="${d.id}" data-domain="${escHtml(d.domain)}" onchange="updateBatchBar()"></td>
+        <td style="font-family:var(--font-mono)">${escHtml(d.domain)}</td>
+        <td>${d.is_active
+          ? '<span class="badge badge-green">● 启用</span>'
+          : '<span class="badge badge-gray">○ 停用</span>'}</td>
+        <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="toggleDomain(${d.id},${!d.is_active})">${d.is_active ? '停用' : '启用'}</button>
+          <button class="btn btn-ghost btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmCFDeleteDomain(${d.id},'${escHtml(d.domain)}')">CF删除</button>
+        </td>
+      </tr>
+    `);
+    updateBatchBar();
+  }
+
+  const adminFilterInput = document.getElementById('admin-domain-filter');
+  const adminFilterActive = document.getElementById('admin-filter-active');
+  const adminFilterDisabled = document.getElementById('admin-filter-disabled');
+
+  if (adminFilterInput) adminFilterInput.addEventListener('input', refreshAdminTable);
+  if (adminFilterActive) adminFilterActive.addEventListener('change', refreshAdminTable);
+  if (adminFilterDisabled) adminFilterDisabled.addEventListener('change', refreshAdminTable);
 
   if (pending.length > 0) {
     startPendingDomainPoller(pending.map(d => d.id));

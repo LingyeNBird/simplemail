@@ -952,3 +952,16 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 .grain-bg {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='1' height='1' fill='%23000' opacity='.03'/%3E%3C/svg%3E");
 }
+
+/* Table filter row */
+.table-filter-row td {
+  padding: 0.4rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.table-filter-row .form-input {
+  background: var(--bg);
+}
+.table-filter-row label {
+  user-select: none;
+}
