@@ -965,3 +965,19 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 .table-filter-row label {
   user-select: none;
 }
+
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  color: var(--text-muted);
+  background: transparent;
+  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+  user-select: none;
+}
+.filter-tag:hover { color: var(--text-secondary); }
+.filter-tag.active { border-color: var(--clr-primary); color: var(--clr-primary); background: rgba(184,92,56,0.08); }

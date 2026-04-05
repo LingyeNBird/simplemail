@@ -810,8 +810,8 @@ function applyDomainFilter(tbodyId, domains, filterInputId, activeCbId, disabled
   if (!tbody) return;
 
   const regexStr = (document.getElementById(filterInputId)?.value || '').trim();
-  const showActive   = document.getElementById(activeCbId)?.checked ?? true;
-  const showDisabled = document.getElementById(disabledCbId)?.checked ?? true;
+  const showActive   = document.getElementById(activeCbId)?.classList.contains('active') ?? true;
+  const showDisabled = document.getElementById(disabledCbId)?.classList.contains('active') ?? true;
 
   let filtered = domains;
 
@@ -903,13 +903,9 @@ async function renderDomainsGuide(container) {
                 <tr class="table-filter-row">
                   <td><input class="form-input domain-filter-input" id="guide-domain-filter" placeholder="正则过滤..." style="padding:0.3rem 0.6rem;font-size:0.78rem"></td>
                   <td></td>
-                  <td style="display:flex;gap:0.8rem;align-items:center">
-                    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
-                      <input type="checkbox" class="domain-cb" id="guide-filter-active" checked> 可用
-                    </label>
-                    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
-                      <input type="checkbox" class="domain-cb" id="guide-filter-disabled" checked> 停用
-                    </label>
+                  <td style="display:flex;gap:0.5rem;align-items:center">
+                    <span class="filter-tag active" id="guide-filter-active" onclick="this.classList.toggle('active');refreshGuideTable()">可用</span>
+                    <span class="filter-tag active" id="guide-filter-disabled" onclick="this.classList.toggle('active');refreshGuideTable()">停用</span>
                   </td>
                 </tr>
               </thead>
@@ -1001,8 +997,6 @@ async function renderDomainsGuide(container) {
   }
 
   if (guideFilterInput) guideFilterInput.addEventListener('input', refreshGuideTable);
-  if (guideFilterActive) guideFilterActive.addEventListener('change', refreshGuideTable);
-  if (guideFilterDisabled) guideFilterDisabled.addEventListener('change', refreshGuideTable);
 
   if (pending.length > 0) {
     startPendingDomainPoller(pending.map(d => d.id));
@@ -1156,18 +1150,14 @@ async function renderAdminDomains(container) {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th style="width:32px"></th><th>域名</th><th>主机名</th><th>状态</th><th>操作</th></tr>
+              <tr><th style="width:32px"></th><th>域名</th><th>主机名</th><th>状态</th><th style="min-width:200px">操作</th></tr>
               <tr class="table-filter-row">
                 <td></td>
                 <td><input class="form-input domain-filter-input" id="admin-domain-filter" placeholder="正则过滤..." style="padding:0.3rem 0.6rem;font-size:0.78rem"></td>
                 <td></td>
-                <td style="display:flex;gap:0.8rem;align-items:center">
-                  <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
-                    <input type="checkbox" class="domain-cb" id="admin-filter-active" checked> 可用
-                  </label>
-                  <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-secondary)">
-                    <input type="checkbox" class="domain-cb" id="admin-filter-disabled" checked> 停用
-                  </label>
+                <td style="display:flex;gap:0.5rem;align-items:center">
+                  <span class="filter-tag active" id="admin-filter-active" onclick="this.classList.toggle('active');refreshAdminTable()">可用</span>
+                  <span class="filter-tag active" id="admin-filter-disabled" onclick="this.classList.toggle('active');refreshAdminTable()">停用</span>
                 </td>
                 <td></td>
               </tr>
@@ -1182,7 +1172,7 @@ async function renderAdminDomains(container) {
                     <td>${d.is_active
                       ? '<span class="badge badge-green">● 启用</span>'
                       : '<span class="badge badge-gray">○ 停用</span>'}</td>
-                    <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+                    <td style="display:flex;gap:0.4rem;align-items:center">
                       <button class="btn btn-ghost btn-sm" onclick="toggleDomain(${d.id},${!d.is_active})">${d.is_active ? '停用' : '启用'}</button>
                       <button class="btn btn-ghost btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
                       <button class="btn btn-danger btn-sm" onclick="confirmCFDeleteDomain(${d.id},'${escHtml(d.domain)}')">CF删除</button>
@@ -1193,17 +1183,17 @@ async function renderAdminDomains(container) {
           </table>
         </div>
       </div>
-      <div class="card" style="min-width:200px">
+      <div class="card" style="min-width:240px">
         <div class="card-header"><div class="card-title">📬 主机名列表</div></div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>主机名</th></tr></thead>
+          <table style="table-layout:auto">
+            <thead><tr><th style="min-width:180px">主机名</th></tr></thead>
             <tbody>
               ${(() => {
                 const hostnames = [...new Set((domains||[]).map(d => d.hostname).filter(Boolean))];
                 return hostnames.length === 0
                   ? '<tr><td style="text-align:center;color:var(--text-muted)">暂无主机名</td></tr>'
-                  : hostnames.map(h => `<tr><td style="font-family:var(--font-mono)">${escHtml(h)}</td></tr>`).join('');
+                  : hostnames.map(h => `<tr><td style="font-family:var(--font-mono);white-space:nowrap">${escHtml(h)}</td></tr>`).join('');
               })()}
             </tbody>
           </table>
@@ -1221,7 +1211,7 @@ async function renderAdminDomains(container) {
         <td>${d.is_active
           ? '<span class="badge badge-green">● 启用</span>'
           : '<span class="badge badge-gray">○ 停用</span>'}</td>
-        <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+        <td style="display:flex;gap:0.4rem;align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="toggleDomain(${d.id},${!d.is_active})">${d.is_active ? '停用' : '启用'}</button>
           <button class="btn btn-ghost btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
           <button class="btn btn-danger btn-sm" onclick="confirmCFDeleteDomain(${d.id},'${escHtml(d.domain)}')">CF删除</button>
@@ -1236,8 +1226,6 @@ async function renderAdminDomains(container) {
   const adminFilterDisabled = document.getElementById('admin-filter-disabled');
 
   if (adminFilterInput) adminFilterInput.addEventListener('input', refreshAdminTable);
-  if (adminFilterActive) adminFilterActive.addEventListener('change', refreshAdminTable);
-  if (adminFilterDisabled) adminFilterDisabled.addEventListener('change', refreshAdminTable);
 
   if (pending.length > 0) {
     startPendingDomainPoller(pending.map(d => d.id));
