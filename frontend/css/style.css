@@ -965,28 +965,3 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 .table-filter-row label {
   user-select: none;
 }
-
-/* Filter tag toggle */
-.filter-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.22rem 0.65rem;
-  border-radius: 100px;
-  font-size: 0.78rem;
-  cursor: pointer;
-  border: 1.5px solid transparent;
-  color: var(--text-muted);
-  background: transparent;
-  transition: all var(--transition);
-  user-select: none;
-  white-space: nowrap;
-}
-.filter-tag:hover {
-  color: var(--text-secondary);
-  background: var(--border-light);
-}
-.filter-tag.active {
-  border-color: var(--clr-primary);
-  color: var(--clr-primary);
-  background: rgba(184, 92, 56, 0.08);
-}
