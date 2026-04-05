@@ -1107,7 +1107,7 @@ async function renderAdminDomains(container) {
   _adminDomains = active;
 
   container.innerHTML = `
-    <div style="max-width:760px;display:flex;flex-direction:column;gap:1rem">
+    <div style="display:flex;gap:1rem;align-items:flex-start">
       ${pending.length > 0 ? `
         <div class="card" style="border-left:3px solid var(--clr-warn,#e6a817)">
           <div class="card-header">
@@ -1192,21 +1192,21 @@ async function renderAdminDomains(container) {
             </tbody>
           </table>
         </div>
-        <div class="card" style="margin-top:0.8rem">
-          <div class="card-header"><div class="card-title">📬 主机名列表</div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>主机名</th></tr></thead>
-              <tbody>
-                ${(() => {
-                  const hostnames = [...new Set((domains||[]).map(d => d.hostname).filter(Boolean))];
-                  return hostnames.length === 0
-                    ? '<tr><td style="text-align:center;color:var(--text-muted)">暂无主机名</td></tr>'
-                    : hostnames.map(h => `<tr><td style="font-family:var(--font-mono)">${escHtml(h)}</td></tr>`).join('');
-                })()}
-              </tbody>
-            </table>
-          </div>
+      </div>
+      <div class="card" style="min-width:200px">
+        <div class="card-header"><div class="card-title">📬 主机名列表</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>主机名</th></tr></thead>
+            <tbody>
+              ${(() => {
+                const hostnames = [...new Set((domains||[]).map(d => d.hostname).filter(Boolean))];
+                return hostnames.length === 0
+                  ? '<tr><td style="text-align:center;color:var(--text-muted)">暂无主机名</td></tr>'
+                  : hostnames.map(h => `<tr><td style="font-family:var(--font-mono)">${escHtml(h)}</td></tr>`).join('');
+              })()}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
