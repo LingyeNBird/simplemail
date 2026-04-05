@@ -1,5 +1,31 @@
 /* ============================================================
    TempMail SPA — 主应用逻辑
+
+   函数索引：
+   [配置/状态]  API_BASE, PUBLIC_BASE, state
+   [工具]       $, el, toast, escHtml, formatDate, timeAgo, copyText
+   [API 客户端] apiFetch, api (public / account / admin)
+   [主题]       applyTheme, toggleTheme
+   [认证]       tryLogin, logout, doLogin, doRegister, switchAuthTab
+   [路由]       navigate, renderPage, init
+   [布局]       showAuthPage, showMainLayout, buildAuthPage, buildMainLayout
+   [侧栏]       toggleSidebar, closeSidebar
+   [Dashboard]  renderDashboard, buildMailboxCard, createMailbox, confirmDeleteMailbox
+   [API Key]    renderApiKeyShow
+   [收件箱]     renderInbox, buildEmailItem, openEmail, refreshInbox, deleteEmail
+   [邮件详情]   renderEmailView
+   [域名]       renderDomainsGuide, applyDomainFilter
+   [管理员-账户] renderAdminAccounts, showCreateAccountModal, confirmDeleteAccount
+   [管理员-域名] renderAdminDomains, showAddDomainModal, doAddDomainCheck,
+                showDnsInstructions, toggleDomain, confirmDeleteDomain,
+                toggleAllDomainCB, updateBatchBar, getCheckedDomainIds,
+                batchToggleDomains, batchDeleteDomains, batchCFDeleteDomains,
+                confirmCFDeleteDomain
+   [管理员-设置] renderAdminSettings, saveSetting, saveSmtpIp, saveRegistrationSetting
+   [域名操作]   showMXRegisterModal, showCFCreateModal
+   [弹窗]       showModal
+   [轮询]       clearInboxPoller, startPendingDomainPoller
+   [API 文档]   renderApiDocs
    ============================================================ */
 
 'use strict';
