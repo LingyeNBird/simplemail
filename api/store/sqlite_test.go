@@ -152,3 +152,54 @@ func TestMigrationExistingDB(t *testing.T) {
 		t.Errorf("hostname after fresh DB = %q, want %q", d.Hostname, "mail.migrated.com")
 	}
 }
+
+func TestRetainedMailCRUD(t *testing.T) {
+	s, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	inserted, err := s.InsertRetainedMail(
+		ctx,
+		" User@Test.Example ",
+		"sender@example.com",
+		"Retained subject",
+		"plain body",
+		"<p>plain body</p>",
+		"raw-message",
+	)
+	if err != nil {
+		t.Fatalf("InsertRetainedMail: %v", err)
+	}
+
+	if inserted.RecipientAddress != "user@test.example" {
+		t.Fatalf("recipient_address = %q, want %q", inserted.RecipientAddress, "user@test.example")
+	}
+
+	list, total, err := s.ListRetainedMails(ctx, 1, 20)
+	if err != nil {
+		t.Fatalf("ListRetainedMails: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total = %d, want 1", total)
+	}
+	if len(list) != 1 {
+		t.Fatalf("len(list) = %d, want 1", len(list))
+	}
+	if list[0].RecipientAddress != "user@test.example" {
+		t.Fatalf("list recipient_address = %q, want %q", list[0].RecipientAddress, "user@test.example")
+	}
+
+	got, err := s.GetRetainedMail(ctx, inserted.ID)
+	if err != nil {
+		t.Fatalf("GetRetainedMail: %v", err)
+	}
+	if got.Subject != "Retained subject" {
+		t.Fatalf("subject = %q, want %q", got.Subject, "Retained subject")
+	}
+	if got.BodyText != "plain body" {
+		t.Fatalf("body_text = %q, want %q", got.BodyText, "plain body")
+	}
+	if got.RawMessage != "raw-message" {
+		t.Fatalf("raw_message = %q, want %q", got.RawMessage, "raw-message")
+	}
+}

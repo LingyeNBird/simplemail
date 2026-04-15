@@ -110,3 +110,24 @@ type EmailSummary struct {
 	SizeBytes  int       `json:"size_bytes"`
 	ReceivedAt time.Time `json:"received_at"`
 }
+
+type RetainedMail struct {
+	ID               uuid.UUID `json:"id"`
+	RecipientAddress string    `json:"recipient_address"`
+	Sender           string    `json:"sender"`
+	Subject          string    `json:"subject"`
+	BodyText         string    `json:"body_text"`
+	BodyHTML         string    `json:"body_html"`
+	RawMessage       string    `json:"raw_message,omitempty"`
+	SizeBytes        int       `json:"size_bytes"`
+	ReceivedAt       time.Time `json:"received_at"`
+}
+
+type RetainedMailSummary struct {
+	ID               uuid.UUID `json:"id"`
+	RecipientAddress string    `json:"recipient_address"`
+	Sender           string    `json:"sender"`
+	Subject          string    `json:"subject"`
+	SizeBytes        int       `json:"size_bytes"`
+	ReceivedAt       time.Time `json:"received_at"`
+}

@@ -72,6 +72,20 @@ CREATE TABLE IF NOT EXISTS emails (
 );
 CREATE INDEX IF NOT EXISTS idx_emails_mailbox_received ON emails (mailbox_id, received_at DESC);
 
+CREATE TABLE IF NOT EXISTS retained_mails (
+    id                TEXT PRIMARY KEY,
+    recipient_address TEXT NOT NULL,
+    sender            TEXT NOT NULL DEFAULT '',
+    subject           TEXT NOT NULL DEFAULT '',
+    body_text         TEXT NOT NULL DEFAULT '',
+    body_html         TEXT NOT NULL DEFAULT '',
+    raw_message       TEXT NOT NULL DEFAULT '',
+    size_bytes        INTEGER NOT NULL DEFAULT 0,
+    received_at       DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_retained_mails_received ON retained_mails (received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_retained_mails_recipient ON retained_mails (recipient_address);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL DEFAULT '',
@@ -640,6 +654,80 @@ func (s *Store) DeleteEmail(ctx context.Context, emailID uuid.UUID, mailboxID uu
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (s *Store) InsertRetainedMail(ctx context.Context, recipientAddress, sender, subject, bodyText, bodyHTML, raw string) (*model.RetainedMail, error) {
+	id := uuid.New()
+	now := time.Now().UTC()
+	recipientAddress = strings.ToLower(strings.TrimSpace(recipientAddress))
+
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO retained_mails (id, recipient_address, sender, subject, body_text, body_html, raw_message, size_bytes, received_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id.String(), recipientAddress, sender, subject, bodyText, bodyHTML, raw, len(raw), now.Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.RetainedMail{
+		ID:               id,
+		RecipientAddress: recipientAddress,
+		Sender:           sender,
+		Subject:          subject,
+		BodyText:         bodyText,
+		BodyHTML:         bodyHTML,
+		RawMessage:       raw,
+		SizeBytes:        len(raw),
+		ReceivedAt:       now,
+	}, nil
+}
+
+func (s *Store) ListRetainedMails(ctx context.Context, page, size int) ([]model.RetainedMailSummary, int, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM retained_mails`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, recipient_address, sender, subject, size_bytes, received_at
+		 FROM retained_mails ORDER BY received_at DESC LIMIT ? OFFSET ?`,
+		size, (page-1)*size,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var retained []model.RetainedMailSummary
+	for rows.Next() {
+		var mail model.RetainedMailSummary
+		var id, receivedAt string
+		if err := rows.Scan(&id, &mail.RecipientAddress, &mail.Sender, &mail.Subject, &mail.SizeBytes, &receivedAt); err != nil {
+			return nil, 0, err
+		}
+		mail.ID = parseUUID(id)
+		mail.ReceivedAt = parseTime(receivedAt)
+		retained = append(retained, mail)
+	}
+
+	return retained, total, rows.Err()
+}
+
+func (s *Store) GetRetainedMail(ctx context.Context, retainedMailID uuid.UUID) (*model.RetainedMail, error) {
+	var mail model.RetainedMail
+	var id, receivedAt string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, recipient_address, sender, subject, body_text, body_html, raw_message, size_bytes, received_at
+		 FROM retained_mails WHERE id = ?`,
+		retainedMailID.String(),
+	).Scan(&id, &mail.RecipientAddress, &mail.Sender, &mail.Subject, &mail.BodyText, &mail.BodyHTML, &mail.RawMessage, &mail.SizeBytes, &receivedAt)
+	if err != nil {
+		return nil, err
+	}
+	mail.ID = parseUUID(id)
+	mail.ReceivedAt = parseTime(receivedAt)
+	return &mail, nil
 }
 
 // ==================== Helpers ====================
