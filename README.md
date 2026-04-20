@@ -10,7 +10,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| 临时邮箱 | 创建临时邮箱，默认 TTL 30 分钟，后台每分钟自动清理过期邮箱 |
+| 临时邮箱 | 创建临时邮箱，默认 TTL 30 分钟；已过期邮箱可手动续期，后台每分钟自动清理过期邮箱 |
 | 多域名池 | 支持多个激活域名，创建邮箱时可指定域名，也可随机分配 |
 | 域名提交与 MX 验证 | 登录用户可提交域名；后台每 30 秒轮询待验证域名，验证通过后自动激活 |
 | 域名健康检查 | 每 6 小时重检已激活域名，MX 失效会自动停用 |
@@ -224,6 +224,12 @@ curl -X POST "$BASE/api/mailboxes" \
 curl "$BASE/api/mailboxes" \
   -H "Authorization: Bearer $KEY"
 
+# 为已过期邮箱续期 30 分钟
+curl -X PUT "$BASE/api/mailboxes/<mailbox-id>/renew" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"minutes":30}'
+
 # 查看某个邮箱的邮件
 curl "$BASE/api/mailboxes/<mailbox-id>/emails" \
   -H "Authorization: Bearer $KEY"
@@ -252,6 +258,7 @@ curl "$BASE/api/stats" \
 - `POST /api/mailboxes`
 - `GET /api/mailboxes`
 - `DELETE /api/mailboxes/:id`
+- `PUT /api/mailboxes/:id/renew`
 - `GET /api/mailboxes/:id/emails`
 - `GET /api/mailboxes/:id/emails/:email_id`
 - `DELETE /api/mailboxes/:id/emails/:email_id`
