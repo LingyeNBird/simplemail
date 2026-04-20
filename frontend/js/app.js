@@ -2294,13 +2294,36 @@ curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '🗑 6. 删除单封邮件',
+      title: '⟳ 6. 续期已过期邮箱',
+      desc: 'PUT /api/mailboxes/:id/renew — 仅允许对已过期邮箱续期，minutes 单位为分钟',
+      code: `MAILBOX_ID="你的邮箱UUID"
+curl -s -X PUT ${base}/api/mailboxes/$MAILBOX_ID/renew \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"minutes":30}'
+
+# 返回示例：
+# {
+#   "mailbox": {
+#     "id": "...",
+#     "full_address": "demo@example.com",
+#     "expires_at": "2026-04-20T12:34:56Z"
+#   }
+# }
+
+# 错误码：
+#   400 → minutes 非法
+#   404 → 邮箱不存在
+#   409 → 邮箱尚未过期`,
+    },
+    {
+      title: '🗑 7. 删除单封邮件',
       desc: 'DELETE /api/mailboxes/:id/emails/:email_id',
       code: `curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID/emails/$EMAIL_ID \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '🌐 7. 获取域名列表',
+      title: '🌐 8. 获取域名列表',
       desc: 'GET /api/domains — 获取所有域名（含激活和待验证），所有已登录用户可用',
       code: `curl -s ${base}/api/domains \\
   -H "Authorization: Bearer ${key}"
@@ -2314,7 +2337,7 @@ curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID \\
 # }`,
     },
     {
-      title: '✨ 8. 创建域名（CF 自动配置）',
+      title: '✨ 9. 创建域名（CF 自动配置）',
       desc: 'POST /api/admin/domains/cf-create — 通过 Cloudflare API 自动创建子域名 MX 解析。需要管理员权限，且系统设置中已配置 cf_api_token 和 smtp_hostname。',
       code: `# 前置条件：系统设置中已配置 cf_api_token 和 smtp_hostname
 curl -s -X POST ${base}/api/admin/domains/cf-create \\
@@ -2337,7 +2360,7 @@ curl -s -X POST ${base}/api/admin/domains/cf-create \\
 #   502 → CF API 创建 DNS 记录失败`,
     },
     {
-      title: '✅ 9. 启用域名',
+      title: '✅ 10. 启用域名',
       desc: 'PUT /api/admin/domains/:id/toggle — 启用或禁用域名。需要管理员权限。',
       code: `DOMAIN_ID=2
 
@@ -2354,7 +2377,7 @@ curl -s -X PUT ${base}/api/admin/domains/$DOMAIN_ID/toggle \\
   -d '{"active":false}'`,
     },
     {
-      title: '🚫 10. 禁用域名',
+      title: '🚫 11. 禁用域名',
       desc: 'PUT /api/admin/domains/:id/toggle — 禁用域名（同上接口，active 传 false）',
       code: `DOMAIN_ID=2
 curl -s -X PUT ${base}/api/admin/domains/$DOMAIN_ID/toggle \\
@@ -2363,7 +2386,7 @@ curl -s -X PUT ${base}/api/admin/domains/$DOMAIN_ID/toggle \\
   -d '{"active":false}'`,
     },
     {
-      title: '🔍 11. 获取域名状态',
+      title: '🔍 12. 获取域名状态',
       desc: 'GET /api/domains/:id/status — 查询域名 MX 验证状态，所有已登录用户可用',
       code: `DOMAIN_ID=2
 curl -s ${base}/api/domains/$DOMAIN_ID/status \\
@@ -2374,7 +2397,7 @@ curl -s ${base}/api/domains/$DOMAIN_ID/status \\
 # status 可选值: active（已激活）| pending（待验证）| disabled（已禁用）`,
     },
     {
-      title: '🧪 12. 完整自动化示例（Shell 脚本）',
+      title: '🧪 13. 完整自动化示例（Shell 脚本）',
       desc: '创建邮箱 → 等待 5 秒 → 读取邮件 → 清理',
       code: `#!/bin/bash
 BASE="${base}"
@@ -2411,7 +2434,7 @@ curl -s -X DELETE $BASE/api/mailboxes/$MB_ID \\
 echo "✓ 邮箱已删除"`,
     },
     {
-      title: '📈 13. 并发压测示例（wrk）',
+      title: '📈 14. 并发压测示例（wrk）',
       desc: '对注册接口进行高并发压测，500 并发，持续 30 秒',
       code: `# 安装 wrk: apt install wrk
 
