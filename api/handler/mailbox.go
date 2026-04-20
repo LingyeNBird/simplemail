@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"tempmail/middleware"
 	"tempmail/model"
@@ -86,8 +87,12 @@ func (h *MailboxHandler) List(c *gin.Context) {
 	account := middleware.GetAccount(c)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	if page < 1 { page = 1 }
-	if size < 1 || size > 100 { size = 20 }
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
+	}
 
 	mailboxes, total, err := h.store.ListMailboxes(c.Request.Context(), account.ID, page, size)
 	if err != nil {
@@ -118,4 +123,42 @@ func (h *MailboxHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "mailbox deleted"})
+}
+
+// PUT /api/mailboxes/:id/renew - 续期已过期邮箱
+func (h *MailboxHandler) Renew(c *gin.Context) {
+	account := middleware.GetAccount(c)
+	id, err := parseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid mailbox id"})
+		return
+	}
+
+	var req model.RenewMailboxReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid renew payload"})
+		return
+	}
+	if req.Minutes <= 0 || req.Minutes > 24*60 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "minutes must be between 1 and 1440"})
+		return
+	}
+
+	mailbox, err := h.store.GetMailbox(c.Request.Context(), id, account.ID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "mailbox not found"})
+		return
+	}
+	if mailbox.ExpiresAt.After(time.Now().UTC()) {
+		c.JSON(http.StatusConflict, gin.H{"error": "mailbox is not expired yet"})
+		return
+	}
+
+	renewed, err := h.store.RenewMailbox(c.Request.Context(), id, account.ID, req.Minutes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, model.RenewMailboxResp{Mailbox: *renewed})
 }

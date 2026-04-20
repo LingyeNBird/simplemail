@@ -96,6 +96,14 @@ type CreateMailboxResp struct {
 	Mailbox Mailbox `json:"mailbox"`
 }
 
+type RenewMailboxReq struct {
+	Minutes int `json:"minutes"`
+}
+
+type RenewMailboxResp struct {
+	Mailbox Mailbox `json:"mailbox"`
+}
+
 type ListResp[T any] struct {
 	Data  []T `json:"data"`
 	Total int `json:"total"`

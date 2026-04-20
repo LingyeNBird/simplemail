@@ -522,6 +522,28 @@ func (s *Store) DeleteMailbox(ctx context.Context, mailboxID uuid.UUID, accountI
 	return nil
 }
 
+func (s *Store) RenewMailbox(ctx context.Context, mailboxID uuid.UUID, accountID uuid.UUID, ttlMinutes int) (*model.Mailbox, error) {
+	if ttlMinutes <= 0 {
+		ttlMinutes = 30
+	}
+
+	expiresAt := time.Now().UTC().Add(time.Duration(ttlMinutes) * time.Minute)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE mailboxes SET expires_at = ? WHERE id = ? AND account_id = ?`,
+		expiresAt.Format(time.RFC3339), mailboxID.String(), accountID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return s.GetMailbox(ctx, mailboxID, accountID)
+}
+
 func (s *Store) GetMailboxByFullAddress(ctx context.Context, fullAddress string) (*model.Mailbox, error) {
 	var m model.Mailbox
 	var id, acctID, createdAt, expiresAt string
