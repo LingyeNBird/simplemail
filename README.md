@@ -322,6 +322,14 @@ tempmail/
 
 ---
 
+## 友链
+
+- Linux.do：<https://linux.do>
+- 原贴：<https://linux.do/t/topic/1667604/90>
+- 源仓库：<https://github.com/123nhh/tempmail>
+
+---
+
 ## 许可证
 
 MIT
