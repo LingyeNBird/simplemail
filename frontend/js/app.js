@@ -156,6 +156,7 @@ const api = {
     updateDomainHostname: (id, hostname) => apiFetch(API_BASE + '/admin/domains/' + id + '/hostname', { method: 'PUT', body: JSON.stringify({ hostname }) }),
     listRetainedMails: (page=1,size=20) => apiFetch(API_BASE + '/admin/retained-mails?page=' + page + '&size=' + size),
     getRetainedMail:  id => apiFetch(API_BASE + '/admin/retained-mails/' + id).then(d => d.retained_mail || d.mail || d),
+    deleteRetainedMail: id => apiFetch(API_BASE + '/admin/retained-mails/' + id, { method: 'DELETE' }),
   },
 };
 
@@ -1245,6 +1246,7 @@ async function renderAdminRetainedMails(container) {
               <th>主题</th>
               <th>接收时间</th>
               <th>状态</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -1260,6 +1262,7 @@ async function renderAdminRetainedMails(container) {
                   <td style="font-size:0.82rem">${escHtml(subject)}</td>
                   <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(m.received_at || m.created_at)}</td>
                   <td>${retained ? '<span class="badge badge-retained">已留存</span>' : '<span class="badge badge-gray">—</span>'}</td>
+                  <td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteRetainedMail('${m.id}','${escHtml(recipient)}')">删除</button></td>
                 </tr>
               `;
             }).join('')}
@@ -1278,6 +1281,21 @@ async function renderAdminRetainedMails(container) {
 window.openRetainedMail = function(id) {
   state.currentRetainedMailId = id;
   navigate('admin-retained-mail-view');
+};
+
+window.confirmDeleteRetainedMail = function(id, recipient) {
+  showModal('删除留存邮件', `<p>确定删除发送到 <strong>${escHtml(recipient)}</strong> 的这封留存邮件？</p>`,
+    async () => {
+      try {
+        await api.admin.deleteRetainedMail(id);
+        if (state.currentRetainedMailId === id) state.currentRetainedMailId = null;
+        toast('留存邮件已删除', 'success');
+        navigate('admin-retained-mails', { retainedMailPage: state.retainedMailPage || 1 });
+      } catch (e) {
+        toast('删除失败: ' + e.message, 'error');
+      }
+    }
+  );
 };
 
 async function renderAdminRetainedMailView(container) {
@@ -2219,16 +2237,36 @@ function renderApiDocs(container) {
     {
       title: '🔐 认证方式',
       desc: '所有 /api/* 接口需要在 HTTP Header 中携带 API Key：',
-      code: `# Bearer Token 方式
+      curl: `# Bearer Token 方式
 curl -H "Authorization: Bearer ${key}" ${base}/api/me
 
 # Query 参数方式
 curl "${base}/api/me?api_key=${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+
+# Bearer Token 方式
+r1 = requests.get(
+    f"{BASE}/api/me",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r1.status_code, r1.text)
+
+# Query 参数方式
+r2 = requests.get(
+    f"{BASE}/api/me",
+    params={"api_key": API_KEY},
+    timeout=10,
+)
+print(r2.status_code, r2.text)`,
     },
     {
       title: '📫 1. 创建临时邮箱',
       desc: 'POST /api/mailboxes — address 和 domain 均为可选字段',
-      code: `# 随机地址 + 随机域名
+      curl: `# 随机地址 + 随机域名
 curl -s -X POST ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -2256,47 +2294,150 @@ curl -s -X POST ${base}/api/mailboxes \\
 #   400 → domain 不存在或未激活
 #   409 → 地址已被占用（换一个 address 或留空让系统随机生成）
 #   503 → 系统内无可用域名`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+# 随机地址 + 随机域名
+r = requests.post(f"{BASE}/api/mailboxes", json={}, headers=HEADERS, timeout=10)
+print("random/random =>", r.status_code, r.text)
+
+# 指定本地部分（@ 之前），域名随机
+r = requests.post(
+    f"{BASE}/api/mailboxes",
+    json={"address": "mytestbox"},
+    headers=HEADERS,
+    timeout=10,
+)
+print("address only =>", r.status_code, r.text)
+
+# 指定域名，地址随机（domain 须是已激活域名）
+r = requests.post(
+    f"{BASE}/api/mailboxes",
+    json={"domain": "example.com"},
+    headers=HEADERS,
+    timeout=10,
+)
+print("domain only =>", r.status_code, r.text)
+
+# 同时指定地址和域名
+r = requests.post(
+    f"{BASE}/api/mailboxes",
+    json={"address": "mytestbox", "domain": "example.com"},
+    headers=HEADERS,
+    timeout=10,
+)
+print("address+domain =>", r.status_code, r.text)
+
+# 常见错误码：400 / 409 / 503`,
     },
     {
       title: '📌 2. 获取邮箱列表',
       desc: 'GET /api/mailboxes — 获取当前账号下所有邮箱',
-      code: `curl -s ${base}/api/mailboxes \\
+      curl: `curl -s ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}"
 
 # 分页
  curl -s "${base}/api/mailboxes?page=1&size=20" \\
   -H "Authorization: Bearer ${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+r = requests.get(f"{BASE}/api/mailboxes", headers=HEADERS, timeout=10)
+print("all =>", r.status_code, r.text)
+
+r = requests.get(
+    f"{BASE}/api/mailboxes",
+    params={"page": 1, "size": 20},
+    headers=HEADERS,
+    timeout=10,
+)
+print("page 1 size 20 =>", r.status_code, r.text)`,
     },
     {
       title: '📥 3. 获取邮箱收件箱（邮件列表）',
       desc: 'GET /api/mailboxes/:id/emails — 按收件时间倒序列出邮件摘要',
-      code: `MAILBOX_ID="你的邮箱UUID"
+      curl: `MAILBOX_ID="你的邮箱UUID"
 curl -s ${base}/api/mailboxes/$MAILBOX_ID/emails \\
   -H "Authorization: Bearer ${key}"
 
 # 分页
 curl -s "${base}/api/mailboxes/$MAILBOX_ID/emails?page=1&size=20" \\
   -H "Authorization: Bearer ${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+MAILBOX_ID = "你的邮箱UUID"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+r = requests.get(
+    f"{BASE}/api/mailboxes/{MAILBOX_ID}/emails",
+    headers=HEADERS,
+    timeout=10,
+)
+print("emails =>", r.status_code, r.text)
+
+r = requests.get(
+    f"{BASE}/api/mailboxes/{MAILBOX_ID}/emails",
+    params={"page": 1, "size": 20},
+    headers=HEADERS,
+    timeout=10,
+)
+print("emails page 1 size 20 =>", r.status_code, r.text)`,
     },
     {
       title: '📝 4. 读取单封邮件',
       desc: 'GET /api/mailboxes/:id/emails/:email_id — 获取邮件完整内容（含 HTML/纯文本和原始数据）',
-      code: `MAILBOX_ID="你的邮箱UUID"
+      curl: `MAILBOX_ID="你的邮箱UUID"
 EMAIL_ID="你的邮件UUID"
 curl -s ${base}/api/mailboxes/$MAILBOX_ID/emails/$EMAIL_ID \\
   -H "Authorization: Bearer ${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+MAILBOX_ID = "你的邮箱UUID"
+EMAIL_ID = "你的邮件UUID"
+
+r = requests.get(
+    f"{BASE}/api/mailboxes/{MAILBOX_ID}/emails/{EMAIL_ID}",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)`,
     },
     {
       title: '🗑 5. 删除邮箱',
       desc: 'DELETE /api/mailboxes/:id — 立即删除邮箱及其所有邮件',
-      code: `MAILBOX_ID="你的邮箱UUID"
+      curl: `MAILBOX_ID="你的邮箱UUID"
 curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID \\
   -H "Authorization: Bearer ${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+MAILBOX_ID = "你的邮箱UUID"
+
+r = requests.delete(
+    f"{BASE}/api/mailboxes/{MAILBOX_ID}",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)`,
     },
     {
       title: '⟳ 6. 续期已过期邮箱',
       desc: 'PUT /api/mailboxes/:id/renew — 仅允许对已过期邮箱续期，minutes 单位为分钟',
-      code: `MAILBOX_ID="你的邮箱UUID"
+      curl: `MAILBOX_ID="你的邮箱UUID"
 curl -s -X PUT ${base}/api/mailboxes/$MAILBOX_ID/renew \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -2315,17 +2456,51 @@ curl -s -X PUT ${base}/api/mailboxes/$MAILBOX_ID/renew \\
 #   400 → minutes 非法
 #   404 → 邮箱不存在
 #   409 → 邮箱尚未过期`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+MAILBOX_ID = "你的邮箱UUID"
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+r = requests.put(
+    f"{BASE}/api/mailboxes/{MAILBOX_ID}/renew",
+    json={"minutes": 30},
+    headers=HEADERS,
+    timeout=10,
+)
+print(r.status_code, r.text)
+
+# 常见错误码：400 / 404 / 409`,
     },
     {
       title: '🗑 7. 删除单封邮件',
       desc: 'DELETE /api/mailboxes/:id/emails/:email_id',
-      code: `curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID/emails/$EMAIL_ID \\
+      curl: `MAILBOX_ID="你的邮箱UUID"
+EMAIL_ID="你的邮件UUID"
+curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID/emails/$EMAIL_ID \\
   -H "Authorization: Bearer ${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+MAILBOX_ID = "你的邮箱UUID"
+EMAIL_ID = "你的邮件UUID"
+
+r = requests.delete(
+    f"{BASE}/api/mailboxes/{MAILBOX_ID}/emails/{EMAIL_ID}",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)`,
     },
     {
       title: '🌐 8. 获取域名列表',
       desc: 'GET /api/domains — 获取所有域名（含激活和待验证），所有已登录用户可用',
-      code: `curl -s ${base}/api/domains \\
+      curl: `curl -s ${base}/api/domains \\
   -H "Authorization: Bearer ${key}"
 
 # 返回示例：
@@ -2335,11 +2510,24 @@ curl -s -X PUT ${base}/api/mailboxes/$MAILBOX_ID/renew \\
 #     {"id":2, "domain":"vet.nightunderfly.online", "is_active":false, "status":"pending"}
 #   ]
 # }`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+
+r = requests.get(
+    f"{BASE}/api/domains",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)
+
+# 返回示例见 curl 版本注释`,
     },
     {
       title: '✨ 9. 创建域名（CF 自动配置）',
       desc: 'POST /api/admin/domains/cf-create — 通过 Cloudflare API 自动创建子域名 MX 解析。需要管理员权限，且系统设置中已配置 cf_api_token 和 smtp_hostname。',
-      code: `# 前置条件：系统设置中已配置 cf_api_token 和 smtp_hostname
+      curl: `# 前置条件：系统设置中已配置 cf_api_token 和 smtp_hostname
 curl -s -X POST ${base}/api/admin/domains/cf-create \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -2358,11 +2546,29 @@ curl -s -X POST ${base}/api/admin/domains/cf-create \\
 #   400 → CF Token 未配置 / 域名格式不合法 / smtp_hostname 未配置 / Zone 未找到
 #   409 → 域名已存在
 #   502 → CF API 创建 DNS 记录失败`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+r = requests.post(
+    f"{BASE}/api/admin/domains/cf-create",
+    json={"domain": "vet.nightunderfly.online"},
+    headers=HEADERS,
+    timeout=10,
+)
+print(r.status_code, r.text)
+
+# 常见错误码：400 / 409 / 502`,
     },
     {
       title: '✅ 10. 启用域名',
       desc: 'PUT /api/admin/domains/:id/toggle — 启用或禁用域名。需要管理员权限。',
-      code: `DOMAIN_ID=2
+      curl: `DOMAIN_ID=2
 
 # 启用域名
 curl -s -X PUT ${base}/api/admin/domains/$DOMAIN_ID/toggle \\
@@ -2375,31 +2581,145 @@ curl -s -X PUT ${base}/api/admin/domains/$DOMAIN_ID/toggle \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{"active":false}'`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+DOMAIN_ID = 2
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+r = requests.put(
+    f"{BASE}/api/admin/domains/{DOMAIN_ID}/toggle",
+    json={"active": True},
+    headers=HEADERS,
+    timeout=10,
+)
+print("enable =>", r.status_code, r.text)
+
+r = requests.put(
+    f"{BASE}/api/admin/domains/{DOMAIN_ID}/toggle",
+    json={"active": False},
+    headers=HEADERS,
+    timeout=10,
+)
+print("disable =>", r.status_code, r.text)`,
     },
     {
       title: '🚫 11. 禁用域名',
       desc: 'PUT /api/admin/domains/:id/toggle — 禁用域名（同上接口，active 传 false）',
-      code: `DOMAIN_ID=2
+      curl: `DOMAIN_ID=2
 curl -s -X PUT ${base}/api/admin/domains/$DOMAIN_ID/toggle \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{"active":false}'`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+DOMAIN_ID = 2
+
+r = requests.put(
+    f"{BASE}/api/admin/domains/{DOMAIN_ID}/toggle",
+    json={"active": False},
+    headers={
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    },
+    timeout=10,
+)
+print(r.status_code, r.text)`,
     },
     {
       title: '🔍 12. 获取域名状态',
       desc: 'GET /api/domains/:id/status — 查询域名 MX 验证状态，所有已登录用户可用',
-      code: `DOMAIN_ID=2
+      curl: `DOMAIN_ID=2
 curl -s ${base}/api/domains/$DOMAIN_ID/status \\
   -H "Authorization: Bearer ${key}"
 
 # 返回示例：
 # {"id":2, "domain":"vet.nightunderfly.online", "status":"pending", "is_active":false, "mx_checked_at":"..."}
 # status 可选值: active（已激活）| pending（待验证）| disabled（已禁用）`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+DOMAIN_ID = 2
+
+r = requests.get(
+    f"{BASE}/api/domains/{DOMAIN_ID}/status",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)
+
+# status 可选值: active | pending | disabled`,
     },
     {
-      title: '🧪 13. 完整自动化示例（Shell 脚本）',
+      title: '📌 13. 获取留存邮件列表（Admin）',
+      desc: 'GET /api/admin/retained-mails — 仅管理员可调用，分页查看系统留存邮件列表',
+      curl: `curl -s "${base}/api/admin/retained-mails?page=1&size=20" \
+  -H "Authorization: Bearer ${key}"
+
+# 返回示例：
+# {
+#   "data": [
+#     {
+#       "id": "...",
+#       "recipient_address": "demo@example.com",
+#       "sender": "sender@example.com",
+#       "subject": "Hello",
+#       "size_bytes": 1234,
+#       "received_at": "2026-04-21T08:00:00Z"
+#     }
+#   ],
+#   "total": 1,
+#   "page": 1,
+#   "size": 20
+# }
+
+# 说明：
+#   只有管理员可调用；普通用户会被拒绝`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+
+r = requests.get(
+    f"{BASE}/api/admin/retained-mails",
+    params={"page": 1, "size": 20},
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)
+
+# 只有管理员可调用；普通用户会被拒绝`,
+    },
+    {
+      title: '📌 14. 获取留存邮件详情（Admin）',
+      desc: 'GET /api/admin/retained-mails/:id — 仅管理员可调用，查看单封留存邮件完整内容',
+      curl: `RETAINED_MAIL_ID="留存邮件UUID"
+curl -s ${base}/api/admin/retained-mails/$RETAINED_MAIL_ID \
+  -H "Authorization: Bearer ${key}"`,
+      python: `import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+RETAINED_MAIL_ID = "留存邮件UUID"
+
+r = requests.get(
+    f"{BASE}/api/admin/retained-mails/{RETAINED_MAIL_ID}",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    timeout=10,
+)
+print(r.status_code, r.text)`,
+    },
+    {
+      title: '🧪 15. 完整自动化示例（Shell 脚本）',
       desc: '创建邮箱 → 等待 5 秒 → 读取邮件 → 清理',
-      code: `#!/bin/bash
+      curl: `#!/bin/bash
 BASE="${base}"
 KEY="${key}"
 
@@ -2432,11 +2752,57 @@ fi
 curl -s -X DELETE $BASE/api/mailboxes/$MB_ID \\
   -H "Authorization: Bearer $KEY"
 echo "✓ 邮箱已删除"`,
+      python: `import json
+import time
+import requests
+
+BASE = "${base}"
+API_KEY = "${key}"
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+# 1. 创建临时邮箱
+mb_resp = requests.post(f"{BASE}/api/mailboxes", json={}, headers=HEADERS, timeout=10)
+mb_resp.raise_for_status()
+mb_data = mb_resp.json()
+
+mailbox = mb_data.get("mailbox") or mb_data
+mb_id = mailbox.get("id")
+mb_addr = mailbox.get("full_address")
+print(f"✓ 邮箱: {mb_addr} (主键: {mb_id})")
+
+# 2. 等待外部发送测试邮件
+print(f"将测试邮件发到: {mb_addr}")
+time.sleep(5)
+
+# 3. 查看收件箱
+emails_resp = requests.get(f"{BASE}/api/mailboxes/{mb_id}/emails", headers=HEADERS, timeout=10)
+emails_resp.raise_for_status()
+emails_data = emails_resp.json()
+print(json.dumps(emails_data, ensure_ascii=False, indent=2))
+
+# 4. 读取第一封邮件
+items = emails_data.get("data") if isinstance(emails_data, dict) else emails_data
+if items:
+    email_id = items[0].get("id")
+    detail_resp = requests.get(
+        f"{BASE}/api/mailboxes/{mb_id}/emails/{email_id}",
+        headers=HEADERS,
+        timeout=10,
+    )
+    print(detail_resp.status_code, detail_resp.text)
+
+# 5. 删除邮箱
+del_resp = requests.delete(f"{BASE}/api/mailboxes/{mb_id}", headers=HEADERS, timeout=10)
+print(del_resp.status_code, del_resp.text)
+print("✓ 邮箱已删除")`,
     },
     {
-      title: '📈 14. 并发压测示例（wrk）',
+      title: '📈 16. 并发压测示例（wrk）',
       desc: '对注册接口进行高并发压测，500 并发，持续 30 秒',
-      code: `# 安装 wrk: apt install wrk
+      curl: `# 安装 wrk: apt install wrk
 
 # 导出注册脚本
 cat > /tmp/register.lua << 'EOF'
@@ -2465,8 +2831,82 @@ export default function() {
 }
 EOF
 k6 run /tmp/test.js`,
+      python: `# 使用 Locust 做并发压测（Python 方案）
+# pip install locust
+
+from locust import HttpUser, task, between
+import random
+
+API_KEY = "${key}"
+
+class TempMailUser(HttpUser):
+    host = "${base}"
+    wait_time = between(0.01, 0.2)
+
+    @task
+    def create_mailbox(self):
+        self.client.post(
+            "/api/mailboxes",
+            json={},
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+            },
+            name="POST /api/mailboxes",
+        )
+
+    @task
+    def register_user(self):
+        self.client.post(
+            "/public/register",
+            json={"username": f"user_{random.randint(100000, 999999)}"},
+            headers={"Content-Type": "application/json"},
+            name="POST /public/register",
+        )
+
+# 运行示例：
+# locust -f locustfile.py --headless -u 500 -r 50 -t 30s`,
     },
   ];
+
+  window.__tmApiDocsLang = window.__tmApiDocsLang || {};
+
+  const getLang = (index) => window.__tmApiDocsLang[index] || 'curl';
+  const getCode = (index, lang = getLang(index)) => sections[index][lang] || sections[index].curl;
+  const toggleBtnStyle = (active) => active
+    ? 'background:var(--clr-primary,#4f6ef7);color:#fff;border-color:var(--clr-primary,#4f6ef7);'
+    : 'background:transparent;color:var(--text-secondary);border-color:transparent;';
+
+  window.setApiDocsLang = function(index, lang) {
+    if (!sections[index]) return;
+    window.__tmApiDocsLang[index] = (lang === 'python') ? 'python' : 'curl';
+    const activeLang = getLang(index);
+    const codeEl = document.getElementById(`api-doc-code-${index}`);
+    if (codeEl) codeEl.textContent = getCode(index, activeLang);
+
+    const curlBtn = document.getElementById(`api-doc-toggle-curl-${index}`);
+    const pyBtn = document.getElementById(`api-doc-toggle-python-${index}`);
+    if (curlBtn) {
+      const isActive = activeLang === 'curl';
+      curlBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      curlBtn.style.cssText = `${toggleBaseBtnStyle}${toggleBtnStyle(isActive)}`;
+    }
+    if (pyBtn) {
+      const isActive = activeLang === 'python';
+      pyBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      pyBtn.style.cssText = `${toggleBaseBtnStyle}${toggleBtnStyle(isActive)}`;
+    }
+  };
+
+  window.copyApiDocsCode = function(index) {
+    if (!sections[index]) return;
+    copyText(getCode(index));
+  };
+
+  const toggleWrapStyle = 'display:inline-flex;align-items:center;border:1px solid var(--border-color);border-radius:999px;padding:2px;background:var(--bg-secondary);margin-left:auto;';
+  const toggleBaseBtnStyle = 'border:1px solid transparent;border-radius:999px;padding:0.1rem 0.55rem;font-size:0.72rem;line-height:1.4;cursor:pointer;transition:all .18s ease;';
+  const codeWrapStyle = 'white-space:pre;overflow-x:auto;font-size:0.75rem;line-height:1.6;position:relative;background:var(--bg-tertiary,#f6f8ff);border:1px solid var(--border-color);border-radius:8px;padding:0.85rem 0.9rem;color:var(--text-primary);';
+  const copyBtnStyle = 'position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:999px;border:1px solid var(--border-color);background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;font-size:0.84rem;padding:0;line-height:1;';
 
   container.innerHTML = `
     <div style="max-width:860px">
@@ -2477,12 +2917,32 @@ k6 run /tmp/test.js`,
       </div>
       ${sections.map((s,i) => `
         <div class="card" style="margin-bottom:1rem">
-          <div class="card-header"><div class="card-title">${escHtml(s.title)}</div></div>
+          <div class="card-header" style="display:flex;align-items:center;gap:0.8rem">
+            <div class="card-title">${escHtml(s.title)}</div>
+            <div style="${toggleWrapStyle}">
+              <button
+                id="api-doc-toggle-curl-${i}"
+                type="button"
+                aria-label="切换到 curl 示例"
+                aria-pressed="${getLang(i) === 'curl' ? 'true' : 'false'}"
+                style="${toggleBaseBtnStyle}${toggleBtnStyle(getLang(i) === 'curl')}"
+                onclick="setApiDocsLang(${i}, 'curl')"
+              >curl</button>
+              <button
+                id="api-doc-toggle-python-${i}"
+                type="button"
+                aria-label="切换到 python 示例"
+                aria-pressed="${getLang(i) === 'python' ? 'true' : 'false'}"
+                style="${toggleBaseBtnStyle}${toggleBtnStyle(getLang(i) === 'python')}"
+                onclick="setApiDocsLang(${i}, 'python')"
+              >python</button>
+            </div>
+          </div>
           <div class="card-body">
             <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.6rem">${escHtml(s.desc)}</p>
-            <div class="code-box" style="white-space:pre;overflow-x:auto;font-size:0.75rem;line-height:1.6;position:relative">
-              <button class="copy-btn" style="position:absolute;top:6px;right:6px" onclick="copyText(${JSON.stringify(s.code)})" title="复制">⎘</button>
-              ${escHtml(s.code)}
+            <div class="code-box" style="${codeWrapStyle}">
+              <button class="copy-btn" style="${copyBtnStyle}" onclick="copyApiDocsCode(${i})" title="复制当前代码" aria-label="复制当前代码">⎘</button>
+              <pre id="api-doc-code-${i}" style="margin:0;padding-right:2rem;background:transparent;white-space:pre;font-family:var(--font-mono);font-size:0.75rem;line-height:1.6;">${escHtml(getCode(i))}</pre>
             </div>
           </div>
         </div>

@@ -263,7 +263,13 @@ curl "$BASE/api/stats" \
 - `GET /api/mailboxes/:id/emails/:email_id`
 - `DELETE /api/mailboxes/:id/emails/:email_id`
 
-管理员接口还包括账户管理、域名管理、系统设置、留存邮件和 Cloudflare 相关操作。
+管理员接口（仅 admin 可调用）还包括：
+
+- `GET /api/admin/retained-mails`
+- `GET /api/admin/retained-mails/:id`
+- `DELETE /api/admin/retained-mails/:id`
+
+以及账户管理、域名管理、系统设置和 Cloudflare 相关操作。
 
 ---
 
