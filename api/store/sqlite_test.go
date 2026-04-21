@@ -202,4 +202,19 @@ func TestRetainedMailCRUD(t *testing.T) {
 	if got.RawMessage != "raw-message" {
 		t.Fatalf("raw_message = %q, want %q", got.RawMessage, "raw-message")
 	}
+
+	if err := s.DeleteRetainedMail(ctx, inserted.ID); err != nil {
+		t.Fatalf("DeleteRetainedMail: %v", err)
+	}
+
+	list, total, err = s.ListRetainedMails(ctx, 1, 20)
+	if err != nil {
+		t.Fatalf("ListRetainedMails after delete: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("total after delete = %d, want 0", total)
+	}
+	if len(list) != 0 {
+		t.Fatalf("len(list) after delete = %d, want 0", len(list))
+	}
 }

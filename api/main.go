@@ -129,6 +129,7 @@ func main() {
 			admin.PUT("/settings", settingH.AdminUpdate)
 			admin.GET("/retained-mails", retainedMailH.List)
 			admin.GET("/retained-mails/:id", retainedMailH.Get)
+			admin.DELETE("/retained-mails/:id", retainedMailH.Delete)
 		}
 	}
 

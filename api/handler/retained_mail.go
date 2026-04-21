@@ -58,3 +58,19 @@ func (h *RetainedMailHandler) Get(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"retained_mail": mail})
 }
+
+// DELETE /api/admin/retained-mails/:id - 删除保留邮件（管理员）
+func (h *RetainedMailHandler) Delete(c *gin.Context) {
+	id, err := parseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid retained mail id"})
+		return
+	}
+
+	if err := h.store.DeleteRetainedMail(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "retained mail not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "retained mail deleted"})
+}

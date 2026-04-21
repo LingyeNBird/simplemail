@@ -752,6 +752,19 @@ func (s *Store) GetRetainedMail(ctx context.Context, retainedMailID uuid.UUID) (
 	return &mail, nil
 }
 
+func (s *Store) DeleteRetainedMail(ctx context.Context, retainedMailID uuid.UUID) error {
+	result, err := s.db.ExecContext(ctx,
+		`DELETE FROM retained_mails WHERE id = ?`, retainedMailID.String())
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // ==================== Helpers ====================
 
 func generateAPIKey() string {
