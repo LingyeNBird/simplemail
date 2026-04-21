@@ -2903,7 +2903,7 @@ class TempMailUser(HttpUser):
     copyText(getCode(index));
   };
 
-  const toggleWrapStyle = 'display:inline-flex;align-items:center;border:1px solid rgba(184,92,56,0.18);border-radius:999px;padding:3px;background:rgba(184,92,56,0.10);margin-left:auto;gap:3px;flex-shrink:0;';
+  const toggleWrapStyle = 'display:inline-flex;align-items:center;border:1px solid rgba(184,92,56,0.18);border-radius:999px;padding:3px;background:rgba(184,92,56,0.10);gap:3px;flex-shrink:0;';
   const toggleBaseBtnStyle = 'border:1px solid transparent;border-radius:999px;padding:0.38rem 0.78rem;font-size:0.74rem;line-height:1.2;font-weight:700;cursor:pointer;transition:all .18s ease;';
   const codeWrapStyle = 'position:relative;background:var(--bg);border:1px solid var(--border);border-radius:14px;color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,0.55);overflow:hidden;';
   const copyBtnStyle = 'position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.72);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;padding:0;line-height:1;opacity:0;transform:translateY(-4px) scale(0.96);pointer-events:none;transition:opacity .18s ease,transform .24s ease,background-color .22s ease,border-color .22s ease,color .22s ease;z-index:1;';
@@ -2921,8 +2921,8 @@ class TempMailUser(HttpUser):
       ${sections.map((s,i) => `
         <div class="card" style="margin-bottom:1rem">
           <div class="card-header" style="padding-bottom:0.8rem">
-            <div style="display:flex;align-items:flex-start;gap:0.8rem">
-              <div class="card-title" style="margin:0;line-height:1.35">${escHtml(s.title)}</div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.8rem;width:100%">
+              <div class="card-title" style="margin:0;line-height:1.35;flex:1;min-width:0">${escHtml(s.title)}</div>
               <div style="${toggleWrapStyle}">
                 <button
                   id="api-doc-toggle-curl-${i}"
