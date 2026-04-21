@@ -2874,7 +2874,7 @@ class TempMailUser(HttpUser):
   const getLang = (index) => window.__tmApiDocsLang[index] || 'curl';
   const getCode = (index, lang = getLang(index)) => sections[index][lang] || sections[index].curl;
   const toggleBtnStyle = (active) => active
-    ? 'background:var(--clr-primary,#4f6ef7);color:#fff;border-color:var(--clr-primary,#4f6ef7);'
+    ? 'background:linear-gradient(135deg,var(--clr-primary),var(--clr-accent));color:#fff;border-color:transparent;box-shadow:0 6px 16px rgba(184,92,56,0.18);'
     : 'background:transparent;color:var(--text-secondary);border-color:transparent;';
 
   window.setApiDocsLang = function(index, lang) {
@@ -2903,10 +2903,13 @@ class TempMailUser(HttpUser):
     copyText(getCode(index));
   };
 
-  const toggleWrapStyle = 'display:inline-flex;align-items:center;border:1px solid var(--border-color);border-radius:999px;padding:2px;background:var(--bg-secondary);margin-left:auto;';
-  const toggleBaseBtnStyle = 'border:1px solid transparent;border-radius:999px;padding:0.1rem 0.55rem;font-size:0.72rem;line-height:1.4;cursor:pointer;transition:all .18s ease;';
-  const codeWrapStyle = 'white-space:pre;overflow-x:auto;font-size:0.75rem;line-height:1.6;position:relative;background:var(--bg-tertiary,#f6f8ff);border:1px solid var(--border-color);border-radius:8px;padding:0.85rem 0.9rem;color:var(--text-primary);';
-  const copyBtnStyle = 'position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:999px;border:1px solid var(--border-color);background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;font-size:0.84rem;padding:0;line-height:1;';
+  const toggleWrapStyle = 'display:inline-flex;align-items:center;border:1px solid rgba(184,92,56,0.18);border-radius:999px;padding:3px;background:rgba(184,92,56,0.10);margin-left:auto;gap:3px;flex-shrink:0;';
+  const toggleBaseBtnStyle = 'border:1px solid transparent;border-radius:999px;padding:0.38rem 0.78rem;font-size:0.74rem;line-height:1.2;font-weight:700;cursor:pointer;transition:all .18s ease;';
+  const codeWrapStyle = 'position:relative;background:var(--bg);border:1px solid var(--border);border-radius:14px;color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,0.55);overflow:hidden;';
+  const copyBtnStyle = 'position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.72);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;padding:0;line-height:1;opacity:0;transform:translateY(-4px) scale(0.96);pointer-events:none;transition:opacity .18s ease,transform .24s ease,background-color .22s ease,border-color .22s ease,color .22s ease;z-index:1;';
+  const copyBtnHoverStyle = 'opacity:1;transform:translateY(0) scale(1);pointer-events:auto;';
+  const codePreStyle = 'margin:0;padding:16px 18px 18px;white-space:pre-wrap;word-break:break-word;overflow-x:auto;font-family:var(--font-mono);font-size:0.75rem;line-height:1.7;background:transparent;padding-right:2.8rem;';
+  const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;display:block;fill:currentColor"><path d="M8 3a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8zm0 2h9v11h-1V8a2 2 0 0 0-2-2H8V5zm-3 3h9v11H5V8z"/></svg>';
 
   container.innerHTML = `
     <div style="max-width:860px">
@@ -2917,32 +2920,34 @@ class TempMailUser(HttpUser):
       </div>
       ${sections.map((s,i) => `
         <div class="card" style="margin-bottom:1rem">
-          <div class="card-header" style="display:flex;align-items:center;gap:0.8rem">
-            <div class="card-title">${escHtml(s.title)}</div>
-            <div style="${toggleWrapStyle}">
-              <button
-                id="api-doc-toggle-curl-${i}"
-                type="button"
-                aria-label="切换到 curl 示例"
-                aria-pressed="${getLang(i) === 'curl' ? 'true' : 'false'}"
-                style="${toggleBaseBtnStyle}${toggleBtnStyle(getLang(i) === 'curl')}"
-                onclick="setApiDocsLang(${i}, 'curl')"
-              >curl</button>
-              <button
-                id="api-doc-toggle-python-${i}"
-                type="button"
-                aria-label="切换到 python 示例"
-                aria-pressed="${getLang(i) === 'python' ? 'true' : 'false'}"
-                style="${toggleBaseBtnStyle}${toggleBtnStyle(getLang(i) === 'python')}"
-                onclick="setApiDocsLang(${i}, 'python')"
-              >python</button>
+          <div class="card-header" style="padding-bottom:0.8rem">
+            <div style="display:flex;align-items:flex-start;gap:0.8rem">
+              <div class="card-title" style="margin:0;line-height:1.35">${escHtml(s.title)}</div>
+              <div style="${toggleWrapStyle}">
+                <button
+                  id="api-doc-toggle-curl-${i}"
+                  type="button"
+                  aria-label="切换到 curl 示例"
+                  aria-pressed="${getLang(i) === 'curl' ? 'true' : 'false'}"
+                  style="${toggleBaseBtnStyle}${toggleBtnStyle(getLang(i) === 'curl')}"
+                  onclick="setApiDocsLang(${i}, 'curl')"
+                >curl</button>
+                <button
+                  id="api-doc-toggle-python-${i}"
+                  type="button"
+                  aria-label="切换到 python 示例"
+                  aria-pressed="${getLang(i) === 'python' ? 'true' : 'false'}"
+                  style="${toggleBaseBtnStyle}${toggleBtnStyle(getLang(i) === 'python')}"
+                  onclick="setApiDocsLang(${i}, 'python')"
+                >python</button>
+              </div>
             </div>
           </div>
           <div class="card-body">
             <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.6rem">${escHtml(s.desc)}</p>
-            <div class="code-box" style="${codeWrapStyle}">
-              <button class="copy-btn" style="${copyBtnStyle}" onclick="copyApiDocsCode(${i})" title="复制当前代码" aria-label="复制当前代码">⎘</button>
-              <pre id="api-doc-code-${i}" style="margin:0;padding-right:2rem;background:transparent;white-space:pre;font-family:var(--font-mono);font-size:0.75rem;line-height:1.6;">${escHtml(getCode(i))}</pre>
+            <div class="code-box" style="${codeWrapStyle}" onmouseenter="this.querySelector('.copy-btn').style.cssText='${copyBtnStyle}${copyBtnHoverStyle}'" onmouseleave="this.querySelector('.copy-btn').style.cssText='${copyBtnStyle}'">
+              <button class="copy-btn" style="${copyBtnStyle}" onclick="copyApiDocsCode(${i})" title="复制当前代码" aria-label="复制当前代码">${copyIcon}</button>
+              <pre id="api-doc-code-${i}" style="${codePreStyle}">${escHtml(getCode(i))}</pre>
             </div>
           </div>
         </div>
