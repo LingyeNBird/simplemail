@@ -604,6 +604,7 @@ function buildMailboxCard(mb) {
       <div class="mailbox-actions">
         ${renewAction}
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openInbox('${mb.id}','${escHtml(mb.full_address)}')">📬 查看邮件</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyText('${escHtml(mb.full_address)}')" title="复制地址">⎘</button>
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();toggleMailboxPin('${mb.id}',${isPinned})" title="${isPinned?'取消永久':'设为永久'}">${isPinned?'📌':'📍'}</button>
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteMailbox('${mb.id}','${escHtml(mb.full_address)}')">✕</button>
       </div>
