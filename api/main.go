@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -151,6 +153,46 @@ func main() {
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"domains": domains})
+		})
+
+		// 返回应该写入 Postfix virtual_domains 的条目
+		// 分两类：
+		//   - hash_domains: is_active=1 的域名（原有白名单，写 hash 表，精确匹配）
+		//   - regexp_lines: 由 retained_domain_patterns 生成的 regexp 表条目
+		//                  （补充收信面，写 regexp 表，后缀/通配符匹配）
+		// Postfix 端 virtual_mailbox_domains = hash:..., regexp:... 并联，
+		// 任一命中即收信。
+		internal.GET("/virtual-domains", func(c *gin.Context) {
+			domains, err := db.ListDomains(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			activeDomains := make([]string, 0, len(domains))
+			for _, d := range domains {
+				if d.IsActive {
+					activeDomains = append(activeDomains, d.Domain)
+				}
+			}
+
+			// 读取管理员配置的留存域名匹配模式
+			patternsJSON, err := db.GetSetting(c.Request.Context(), "retained_domain_patterns")
+			if err != nil || strings.TrimSpace(patternsJSON) == "" {
+				patternsJSON = "[]"
+			}
+			var patterns []string
+			if err := json.Unmarshal([]byte(patternsJSON), &patterns); err != nil {
+				log.Printf("[virtual-domains] invalid retained_domain_patterns JSON: %v", err)
+				patterns = nil
+			}
+
+			regexpLines := buildRetainedRegexpLines(patterns)
+
+			c.JSON(http.StatusOK, gin.H{
+				"hash_domains": activeDomains,
+				"regexp_lines": regexpLines,
+			})
 		})
 
 		internal.POST("/deliver", func(c *gin.Context) {
@@ -329,4 +371,55 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 	log.Println("Server exited")
+}
+
+// buildRetainedRegexpLines 把用户配置的 retained_domain_patterns 转换成
+// Postfix regexp: 表条目。格式：每行 "<正则> <结果>"。
+// 支持的 pattern 语法：
+//   - "*"                → 匹配所有域名
+//   - "*.example.com"    → 匹配 example.com 本身及其任意子域
+//   - "example.com"      → 仅精确匹配 example.com
+// 其它字符按字面处理（仅做正则元字符转义，不做语义扩展）。
+func buildRetainedRegexpLines(patterns []string) []string {
+	if len(patterns) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" {
+			continue
+		}
+		var re string
+		switch {
+		case p == "*":
+			// 全收——正则匹配任何非空域名
+			re = `/.+/`
+		case strings.HasPrefix(p, "*."):
+			// 子域通配：*.example.com → 匹配 example.com 及任意前置子域
+			suffix := regexpEscape(strings.TrimPrefix(p, "*."))
+			if suffix == "" {
+				continue
+			}
+			re = `/(^|\.)` + suffix + `$/`
+		default:
+			// 精确匹配
+			re = `/^` + regexpEscape(p) + `$/`
+		}
+		lines = append(lines, re+" OK")
+	}
+	return lines
+}
+
+// regexpEscape 转义正则元字符，把域名当字面量处理。
+func regexpEscape(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '.', '+', '*', '?', '(', ')', '[', ']', '{', '}', '^', '$', '|', '\\':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

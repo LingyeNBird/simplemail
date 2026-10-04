@@ -22,7 +22,7 @@ local_transport = error:local delivery disabled
 local_recipient_maps =
 
 # 虚拟域名 catch-all
-virtual_mailbox_domains = hash:/etc/postfix/virtual_domains
+virtual_mailbox_domains = hash:/etc/postfix/virtual_domains, regexp:/etc/postfix/virtual_domains_regexp
 virtual_transport = mailreceiver:
 
 # 限制

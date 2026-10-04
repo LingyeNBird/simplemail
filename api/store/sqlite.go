@@ -96,6 +96,7 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_open', 'tr
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('smtp_server_ip', '');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('smtp_hostname', '');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mailbox_ttl_minutes', '30');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('retained_domain_patterns', '[]');
 `
 
 var migrateSQL = `

@@ -52,7 +52,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # 权限 & 初始化
 RUN chmod +x /usr/local/bin/api-server /usr/local/bin/mail-receiver /entrypoint.sh \
-    && touch /etc/postfix/virtual_domains \
+    && touch /etc/postfix/virtual_domains /etc/postfix/virtual_domains_regexp \
     && postmap /etc/postfix/virtual_domains \
     && mkdir -p /var/log/supervisor
 

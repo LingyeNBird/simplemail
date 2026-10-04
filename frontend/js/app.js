@@ -1862,6 +1862,23 @@ async function renderAdminSettings(container) {
         </div>
         <div class="divider"></div>
 
+        <!-- 留存邮件域名匹配规则 -->
+        <div class="form-group">
+          <label class="form-label">留存邮件域名匹配规则</label>
+          <div style="display:flex;gap:0.5rem">
+            <textarea class="form-input" id="input-retained-domain-patterns" rows="3" placeholder='*.example.com&#10;mydomain.org&#10;*' style="flex:1;resize:vertical;font-family:var(--font-mono);font-size:0.82rem">${escHtml(parseRetainedPatterns(settings.retained_domain_patterns))}</textarea>
+            <button class="btn btn-primary btn-sm" onclick="saveRetainedPatterns()" style="align-self:flex-start">✓ 保存</button>
+          </div>
+          <div class="form-hint">
+            每行一条规则；匹配收件人地址的域名部分。<br>
+            • <code>*</code> 单独一行 = 接收所有发到本机的邮件<br>
+            • <code>*.example.com</code> = 接收 example.com 及其所有子域的邮件<br>
+            • <code>example.com</code> = 仅接收 example.com 本身的邮件<br>
+            规则用于<b>补充</b>收信面：命中的邮件会进入"留存邮件"，不影响正常邮箱收件。留空则不启用。
+          </div>
+        </div>
+        <div class="divider"></div>
+
         <!-- 默认邮箱域名 -->
         ${inputRow('input-default-domain', '默认邮箱域名', defDomain, '创建邮箱时下拉框优先选中的域名', 'mail.example.com')}
         <div class="divider"></div>
@@ -1922,6 +1939,28 @@ window.saveRegistrationSetting = async function(enabled) {
     const cb = $('toggle-reg');
     if (cb) cb.checked = !enabled;
   }
+};
+
+// 解析 settings.retained_domain_patterns（JSON 字符串数组 → 每行一个）
+function parseRetainedPatterns(raw) {
+  if (!raw) return '';
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.join('\n') : '';
+  } catch { return ''; }
+}
+
+// 保存留存邮件域名匹配规则：把多行文本转成 JSON 字符串数组
+window.saveRetainedPatterns = async function() {
+  const el = document.getElementById('input-retained-domain-patterns');
+  const lines = (el ? el.value : '')
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+  try {
+    await api.admin.saveSettings({ retained_domain_patterns: JSON.stringify(lines) });
+    toast(`已保存 ${lines.length} 条留存匹配规则`, 'success');
+  } catch(e) { toast('保存失败: ' + e.message, 'error'); }
 };
 
 // ─── Modal ────────────────────────────────────────────────

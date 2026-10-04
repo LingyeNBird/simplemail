@@ -70,6 +70,7 @@ func (h *SettingHandler) AdminUpdate(c *gin.Context) {
 		"default_domain":         true,
 		"mailbox_ttl_minutes":    true,
 		"cf_api_token":           true,
+		"retained_domain_patterns": true,
 	}
 
 	envUpdates := make(map[string]string)
