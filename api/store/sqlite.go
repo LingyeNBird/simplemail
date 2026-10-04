@@ -98,11 +98,14 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES ('smtp_server_ip', '');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('smtp_hostname', '');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mailbox_ttl_minutes', '30');
 `
+// migrateSQL 逐条执行的 schema 迁移语句。每条独立 ExecContext，
+// 失败（通常是列已存在）会被容忍——这样新加迁移语句不会因旧迁移
+// 已生效而跳过后续迁移。
+var migrateSQL = []string{
+	`ALTER TABLE domains ADD COLUMN hostname TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE mailboxes ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`,
+}
 
-var migrateSQL = `
-ALTER TABLE domains ADD COLUMN hostname TEXT NOT NULL DEFAULT '';
-ALTER TABLE mailboxes ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
-`
 
 func New(ctx context.Context, dbPath string) (*Store, error) {
 	if dbPath == "" {
@@ -136,8 +139,11 @@ func New(ctx context.Context, dbPath string) (*Store, error) {
 	if _, err := db.ExecContext(ctx, initSQL); err != nil {
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
-	// Migrate: add hostname column to domains (safe to run repeatedly)
-	db.ExecContext(ctx, migrateSQL)
+	// Migrate: each statement is independent; failures (e.g. duplicate column) are tolerated
+	// so adding new migrations doesn't get blocked by already-applied older ones.
+	for _, stmt := range migrateSQL {
+		db.ExecContext(ctx, stmt)
+	}
 
 	// Migrate: backfill hostname from old smtp_hostname setting
 	var oldHostname string
