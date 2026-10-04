@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -161,4 +162,45 @@ func (h *MailboxHandler) Renew(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, model.RenewMailboxResp{Mailbox: *renewed})
+}
+
+// PUT /api/mailboxes/:id/pin - 切换邮箱永久标记
+// body: {"pinned": true|false}
+//   pinned=true  → 设为永久邮箱（is_pinned=1），永不过期
+//   pinned=false → 取消永久，expires_at 重置为 now+ttl（重新计时）
+func (h *MailboxHandler) Pin(c *gin.Context) {
+	account := middleware.GetAccount(c)
+	id, err := parseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid mailbox id"})
+		return
+	}
+
+	var req struct {
+		Pinned bool `json:"pinned"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid pin payload"})
+		return
+	}
+
+	// 读取 TTL 设置（unpin 时重新计时用）
+	ttlMinutes := 30
+	if ttlStr, err := h.store.GetSetting(c.Request.Context(), "mailbox_ttl_minutes"); err == nil {
+		if n, err := strconv.Atoi(ttlStr); err == nil && n > 0 {
+			ttlMinutes = n
+		}
+	}
+
+	mailbox, err := h.store.SetMailboxPinned(c.Request.Context(), id, account.ID, req.Pinned, ttlMinutes)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "mailbox not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"mailbox": mailbox})
 }

@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS mailboxes (
     domain_id    INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
     full_address TEXT NOT NULL UNIQUE,
     created_at   DATETIME NOT NULL DEFAULT (datetime('now')),
-    expires_at   DATETIME NOT NULL DEFAULT (datetime('now', '+30 minutes'))
+    expires_at   DATETIME NOT NULL DEFAULT (datetime('now', '+30 minutes')),
+    is_pinned    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_mailboxes_account_id ON mailboxes (account_id);
 CREATE INDEX IF NOT EXISTS idx_mailboxes_expires_at ON mailboxes (expires_at);
@@ -100,6 +101,7 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mailbox_ttl_minutes', '
 
 var migrateSQL = `
 ALTER TABLE domains ADD COLUMN hostname TEXT NOT NULL DEFAULT '';
+ALTER TABLE mailboxes ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
 `
 
 func New(ctx context.Context, dbPath string) (*Store, error) {
@@ -453,7 +455,7 @@ func (s *Store) CreateMailbox(ctx context.Context, accountID uuid.UUID, address 
 
 	return &model.Mailbox{
 		ID: id, AccountID: accountID, Address: address, DomainID: domainID,
-		FullAddress: fullAddress, CreatedAt: now, ExpiresAt: expiresAt,
+		FullAddress: fullAddress, CreatedAt: now, ExpiresAt: expiresAt, IsPinned: false,
 	}, nil
 }
 
@@ -465,7 +467,7 @@ func (s *Store) ListMailboxes(ctx context.Context, accountID uuid.UUID, page, si
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at
+		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at, is_pinned
 		 FROM mailboxes WHERE account_id = ?
 		 ORDER BY created_at DESC LIMIT ? OFFSET ?`,
 		accountID.String(), size, (page-1)*size,
@@ -479,13 +481,15 @@ func (s *Store) ListMailboxes(ctx context.Context, accountID uuid.UUID, page, si
 	for rows.Next() {
 		var m model.Mailbox
 		var id, acctID, createdAt, expiresAt string
-		if err := rows.Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt); err != nil {
+		var isPinned int
+		if err := rows.Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt, &isPinned); err != nil {
 			return nil, 0, err
 		}
 		m.ID = parseUUID(id)
 		m.AccountID = parseUUID(acctID)
 		m.CreatedAt = parseTime(createdAt)
 		m.ExpiresAt = parseTime(expiresAt)
+		m.IsPinned = isPinned != 0
 		mailboxes = append(mailboxes, m)
 	}
 	return mailboxes, total, rows.Err()
@@ -494,11 +498,12 @@ func (s *Store) ListMailboxes(ctx context.Context, accountID uuid.UUID, page, si
 func (s *Store) GetMailbox(ctx context.Context, mailboxID uuid.UUID, accountID uuid.UUID) (*model.Mailbox, error) {
 	var m model.Mailbox
 	var id, acctID, createdAt, expiresAt string
+	var isPinned int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at
+		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at, is_pinned
 		 FROM mailboxes WHERE id = ? AND account_id = ?`,
 		mailboxID.String(), accountID.String(),
-	).Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt)
+	).Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt, &isPinned)
 	if err != nil {
 		return nil, err
 	}
@@ -506,6 +511,7 @@ func (s *Store) GetMailbox(ctx context.Context, mailboxID uuid.UUID, accountID u
 	m.AccountID = parseUUID(acctID)
 	m.CreatedAt = parseTime(createdAt)
 	m.ExpiresAt = parseTime(expiresAt)
+	m.IsPinned = isPinned != 0
 	return &m, nil
 }
 
@@ -547,11 +553,12 @@ func (s *Store) RenewMailbox(ctx context.Context, mailboxID uuid.UUID, accountID
 func (s *Store) GetMailboxByFullAddress(ctx context.Context, fullAddress string) (*model.Mailbox, error) {
 	var m model.Mailbox
 	var id, acctID, createdAt, expiresAt string
+	var isPinned int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at
+		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at, is_pinned
 		 FROM mailboxes WHERE full_address = ?`,
 		strings.ToLower(fullAddress),
-	).Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt)
+	).Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt, &isPinned)
 	if err != nil {
 		return nil, err
 	}
@@ -559,11 +566,43 @@ func (s *Store) GetMailboxByFullAddress(ctx context.Context, fullAddress string)
 	m.AccountID = parseUUID(acctID)
 	m.CreatedAt = parseTime(createdAt)
 	m.ExpiresAt = parseTime(expiresAt)
+	m.IsPinned = isPinned != 0
 	return &m, nil
 }
 
+// SetMailboxPinned 切换邮箱的永久标记。
+// pinned=true：设置 is_pinned=1，expires_at 保持不变（被忽略）
+// pinned=false：is_pinned=0 并将 expires_at 重置为 now+ttlMinutes（重新计时）
+func (s *Store) SetMailboxPinned(ctx context.Context, mailboxID uuid.UUID, accountID uuid.UUID, pinned bool, ttlMinutes int) (*model.Mailbox, error) {
+	if ttlMinutes <= 0 {
+		ttlMinutes = 30
+	}
+	var result sql.Result
+	var err error
+	if pinned {
+		result, err = s.db.ExecContext(ctx,
+			`UPDATE mailboxes SET is_pinned = 1 WHERE id = ? AND account_id = ?`,
+			mailboxID.String(), accountID.String(),
+		)
+	} else {
+		expiresAt := time.Now().UTC().Add(time.Duration(ttlMinutes) * time.Minute)
+		result, err = s.db.ExecContext(ctx,
+			`UPDATE mailboxes SET is_pinned = 0, expires_at = ? WHERE id = ? AND account_id = ?`,
+			expiresAt.Format(time.RFC3339), mailboxID.String(), accountID.String(),
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return s.GetMailbox(ctx, mailboxID, accountID)
+}
+
 func (s *Store) DeleteExpiredMailboxes(ctx context.Context) (int64, error) {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM mailboxes WHERE expires_at < datetime('now')`)
+	result, err := s.db.ExecContext(ctx,
+		`DELETE FROM mailboxes WHERE expires_at < datetime('now') AND is_pinned = 0`)
 	if err != nil {
 		return 0, err
 	}

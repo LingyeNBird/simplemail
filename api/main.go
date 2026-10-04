@@ -98,6 +98,7 @@ func main() {
 		api.GET("/mailboxes", mailboxH.List)
 		api.DELETE("/mailboxes/:id", mailboxH.Delete)
 		api.PUT("/mailboxes/:id/renew", mailboxH.Renew)
+		api.PUT("/mailboxes/:id/pin", mailboxH.Pin)
 
 		// 邮件管理
 		api.GET("/mailboxes/:id/emails", emailH.List)

@@ -45,6 +45,7 @@ type Mailbox struct {
 	FullAddress string    `json:"full_address"`
 	CreatedAt   time.Time `json:"created_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
+	IsPinned    bool      `json:"is_pinned"`
 }
 
 type Email struct {

@@ -155,6 +155,7 @@ const api = {
   listMailboxes:   () => apiFetch(API_BASE + '/mailboxes').then(d => Array.isArray(d) ? d : (d.data || [])),
   deleteMailbox: id  => apiFetch(API_BASE + '/mailboxes/' + id, { method: 'DELETE' }),
   renewMailbox: (id, body) => apiFetch(API_BASE + '/mailboxes/' + id + '/renew', { method: 'PUT', body: JSON.stringify(body || {}) }).then(d => d.mailbox || d),
+  pinMailbox:   (id, pinned) => apiFetch(API_BASE + '/mailboxes/' + id + '/pin', { method: 'PUT', body: JSON.stringify({ pinned }) }).then(d => d.mailbox || d),
   // 邮件 → 解包 {data:[...]}
   listEmails: mid    => apiFetch(API_BASE + '/mailboxes/' + mid + '/emails').then(d => Array.isArray(d) ? d : (d.data || [])),
   getEmail:   (mid, eid) => apiFetch(API_BASE + '/mailboxes/' + mid + '/emails/' + eid).then(d => d.email || d),
@@ -579,7 +580,10 @@ function buildMailboxCard(mb) {
   const now = new Date();
   let expiryHtml = '';
   let renewAction = '';
-  if (expiresAt) {
+  const isPinned = mb.is_pinned === true || mb.is_pinned === 1;
+  if (isPinned) {
+    expiryHtml = '<span style="color:var(--clr-primary);font-size:0.75rem">📌 永久</span>';
+  } else if (expiresAt) {
     const diffMs = expiresAt - now;
     if (diffMs <= 0) {
       expiryHtml = '<span style="color:var(--clr-danger);font-size:0.75rem">⏱ 已过期</span>';
@@ -600,7 +604,7 @@ function buildMailboxCard(mb) {
       <div class="mailbox-actions">
         ${renewAction}
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openInbox('${mb.id}','${escHtml(mb.full_address)}')">📬 查看邮件</button>
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyText('${escHtml(mb.full_address)}')" title="复制地址">⎘</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();toggleMailboxPin('${mb.id}',${isPinned})" title="${isPinned?'取消永久':'设为永久'}">${isPinned?'📌':'📍'}</button>
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteMailbox('${mb.id}','${escHtml(mb.full_address)}')">✕</button>
       </div>
     </div>
@@ -678,6 +682,16 @@ window.createMailbox = async function() {
       toast('创建失败：' + e.message, 'error');
     }
   });
+};
+
+window.toggleMailboxPin = async function(id, currentlyPinned) {
+  try {
+    await api.pinMailbox(id, !currentlyPinned);
+    toast(currentlyPinned ? '已取消永久，重新进入倒计时' : '已设为永久邮箱', 'success');
+    navigate('dashboard');
+  } catch(e) {
+    toast('操作失败: ' + e.message, 'error');
+  }
 };
 
 window.confirmDeleteMailbox = function(id, addr) {
